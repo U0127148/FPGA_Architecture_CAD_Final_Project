@@ -8,6 +8,7 @@ public:
     void read(char *argv[]);
     void makeWindow();
     void setUpObject();
+    void getGlobalMinimum();
 private:
     std::vector<Block*> resource;
     std::vector<Block*> inst;
@@ -17,7 +18,7 @@ private:
 
     std::vector<std::vector<Block*>> window[4];
 
-    int mcell_num;
-    int **C_matrix;
-    int **d_x, **d_y;
+    int mcell_num = 0, fcell_num = 0;
+    double **C_matrix;
+    double **d_x, **d_y;
 };

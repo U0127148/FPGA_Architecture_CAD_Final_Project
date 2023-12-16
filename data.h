@@ -14,6 +14,7 @@ struct Block {
     int type;
     double center_x, center_y;
     int layer, unit;
+    int cell_id_org, cell_id;
     Block(int t, double x, double y) : type(t), center_x(x), center_y(y) {}
 };
 
@@ -32,8 +33,4 @@ struct Net {
         }
         HPWL = (max_x - min_x) + (max_y - min_y);
     }
-};
-
-struct Cluster {
-    std::vector<Net*> net_vec;
 };

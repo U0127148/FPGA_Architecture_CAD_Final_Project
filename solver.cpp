@@ -65,12 +65,16 @@ void Solver::read(char *argv[]) {
                 // std::cout << "type: " << info << ' ';
                 if (info == "CLB") {
                     block_type = blockType::CLB;
+                    mcell_num++;
                 } else if (info == "RAM") {
                     block_type = blockType::RAM;
+                    mcell_num++;
                 } else if (info == "DSP") {
                     block_type = blockType::DSP;
+                    mcell_num++;
                 } else if (info == "IO") {
                     block_type = blockType::IO;
+                    fcell_num++;
                 } else {
                     std::cout << "[ERROR] read SECOND input file\n"; 
                 }
@@ -84,6 +88,10 @@ void Solver::read(char *argv[]) {
                 Block* inst_block = new Block(block_type, center_x, center_y);
                 inst.push_back(inst_block);
                 nameToInst[name] = inst_block;
+
+                // update cell id (original)
+                inst_block->cell_id_org = inst.size() - 1;
+                inst_block->cell_id = inst.size() - 1;
             }
             n++;
         }
@@ -116,6 +124,15 @@ void Solver::read(char *argv[]) {
         // std::cout << net->name << " HPWL: " << net->HPWL << std::endl;
     }
     */
+   
+    int cnt = 0;
+    for (auto &it : inst) {
+        if (it->type == blockType::IO) cnt++;
+        else it->cell_id -= cnt;
+    }
+    // for (auto &it : inst) {
+    //     std::cout << it->cell_id_org << ' ' << it->cell_id << std::endl;
+    // }
 }
 
 void Solver::makeWindow() {
@@ -250,5 +267,52 @@ void Solver::makeWindow() {
 }
 
 void Solver::setUpObject() {
+    C_matrix = new double*[mcell_num];
+    for (size_t i = 0; i < mcell_num; ++i) {
+        C_matrix[i] = new double[mcell_num];
+    }
+    d_x = new double*[mcell_num];
+    for (size_t i = 0; i < mcell_num; ++i) {
+        d_x[i] = new double[1];
+    }
+    d_y = new double*[mcell_num];
+    for (size_t i = 0; i < mcell_num; ++i) {
+        d_y[i] = new double[1];
+    }
 
+    for (size_t i = 0; i < mcell_num; ++i) {
+        d_x[i][0] = 0;
+        d_y[i][0] = 0;
+        for (size_t j = 0; j < mcell_num; ++j) {
+            C_matrix[i][j] = 0;
+        }
+    }
+
+    double e;
+    Block* block;
+    for (auto &net : net_vec) {
+        e = 2.0 / (double)net->inst_vec.size();
+        int c, c_lamda;
+        for (size_t i = 0; i < net->inst_vec.size(); ++i) {
+            block = net->inst_vec[i];
+            if (block->type == blockType::IO) continue;
+            c = block->cell_id;
+            C_matrix[c][c] += e * (net->inst_vec.size() - 1);
+
+            for (size_t j = 0; j < net->inst_vec.size(); ++j) {
+                if (net->inst_vec[j] == block) continue;
+                c_lamda = net->inst_vec[j]->cell_id;
+                if (net->inst_vec[j]->type == blockType::IO) {
+                    d_x[c][0] -= e * net->inst_vec[j]->center_x;
+                    d_y[c][0] -= e * net->inst_vec[j]->center_y;
+                } else {
+                    C_matrix[c][c_lamda] -= e;
+                }
+            }
+        }
+    }
+}
+
+void Solver::getGlobalMinimum() {
+    
 }
