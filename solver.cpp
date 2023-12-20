@@ -11,7 +11,9 @@ double *region_area;
 double **C_matrix_tmp;
 double *d_x_tmp, *d_y_tmp;
 double **D_matrix, **B_matrix;
-double **u, **Z, **D_matrix_inv;
+double **Z, **D_matrix_inv;
+double **tmp;
+std::vector<Block*> v;
 
 void first(int i, int m, double** arr, double** arr_1) { // 設定前導壹
 	double tmp;
@@ -396,6 +398,10 @@ void Solver::setUpObject() {
     for (size_t i = 0; i < mcell_num; ++i) {
         Z[i] = new double[mcell_num];
     }
+    tmp = new double*[mcell_num];
+    for (size_t i = 0; i < mcell_num; ++i) {
+        tmp[i] = new double[mcell_num];
+    }
 }
 
 void Solver::setUpConstraint() {
@@ -444,7 +450,7 @@ void Solver::setUpConstraint() {
     // }
 
     // values for d_x_tmp d_y_tmp C_matrix_tmp
-    std::vector<Block*> v;
+    v.clear();
     for (size_t i = 0; i < region_num; ++i) {
         v.push_back(region_info[i].front());
     }
@@ -490,7 +496,20 @@ void Solver::setUpConstraint() {
 }
 
 void Solver::globalOptimize() {
+    // first calculate cT
 
+    // second calculate ZTCZ
+    double val = 0;
+    for (size_t row = 0; row < (mcell_num - region_num); ++row) {
+        for (size_t col = 0; col < (mcell_num - region_num); ++col) {
+            tmp[row][col] = 0;
+            for (size_t i = 0; i < mcell_num; ++i) {
+                for (size_t j = 0; j < mcell_num; ++j) {
+                    tmp[row][col] += Z[i][row] * C_matrix_tmp[i][j] * Z[i][col];
+                }
+            }
+        }
+    }
 }
 
 void Solver::iterPlacePartition() {
