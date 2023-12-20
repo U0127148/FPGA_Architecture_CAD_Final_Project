@@ -14,8 +14,10 @@ struct Block {
     int type;
     double center_x, center_y;
     int layer, unit;
+    double size;
     int cell_id_org, cell_id;
-    Block(int t, double x, double y) : type(t), center_x(x), center_y(y) {}
+    int region_idx;
+    Block(int t, double x, double y) : type(t), center_x(x), center_y(y), region_idx(0) {}
 };
 
 struct Net {

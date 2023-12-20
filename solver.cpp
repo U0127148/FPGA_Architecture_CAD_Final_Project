@@ -7,7 +7,67 @@
 double min_y[4];
 double height[4];
 int unit[4];
-std::unordered_map<Net*, std::vector<Net*>> adj;
+double *region_area;
+double **C_matrix_tmp;
+double *d_x_tmp, *d_y_tmp;
+double **D_matrix, **B_matrix;
+double **u, **Z, **D_matrix_inv;
+
+void first(int i, int m, double** arr, double** arr_1) { // 設定前導壹
+	double tmp;
+	int j;
+	tmp = arr[i][i];
+	for (j = 0; j < m; j++) {
+		arr[i][j] = arr[i][j] / tmp;
+		arr_1[i][j] = arr_1[i][j] / tmp;
+	}
+}
+
+void zero(int i, int m, double** arr, double** arr_1) { // 將前導壹的上下列變為零
+	int j, k;
+	double tmp;
+	for (j = 0; j < m; j++) {
+		if (j == i)
+			continue;
+		tmp = -1 * arr[j][i];
+		for (k = 0; k < m; k++) {
+			arr[j][k] = arr[j][k] + (tmp * arr[i][k]);
+			arr_1[j][k] = arr_1[j][k] + (tmp * arr_1[i][k]);
+		}
+	}
+}
+
+void gauss_jordan(int m, double** arr, double** arr_1) { // 高登-喬登消去法
+	int i, j;
+	double tmp;
+	for (i = 0; i < m; i++) {
+		if (arr[i][i] == 0) {
+			if (i == (m - 1)) {
+				break;
+			}
+			else {
+				for (j = 0; j < m; j++) {
+					arr[i][j] = arr[i][j] + arr[i + 1][j];
+					arr_1[i][j] = arr_1[i][j] + arr_1[i + 1][j];
+				}
+				first(i, m, arr, arr_1);
+				zero(i, m, arr, arr_1);
+			}
+		}
+		else {
+			first(i, m, arr, arr_1);
+			zero(i, m, arr, arr_1);
+		}
+	}
+}
+
+double matrixCalculation(size_t row, size_t col, double** m1, double** m2, int q) {
+    double val = 0;
+    for (int i = 0; i < q; ++i) {
+        val += (m1[row][i] * m2[i][col]);
+    }
+    return val;
+}
 
 void Solver::read(char *argv[]) {
     std::string line;
@@ -271,18 +331,12 @@ void Solver::setUpObject() {
     for (size_t i = 0; i < mcell_num; ++i) {
         C_matrix[i] = new double[mcell_num];
     }
-    d_x = new double*[mcell_num];
-    for (size_t i = 0; i < mcell_num; ++i) {
-        d_x[i] = new double[1];
-    }
-    d_y = new double*[mcell_num];
-    for (size_t i = 0; i < mcell_num; ++i) {
-        d_y[i] = new double[1];
-    }
+    d_x = new double[mcell_num];
+    d_y = new double[mcell_num];
 
     for (size_t i = 0; i < mcell_num; ++i) {
-        d_x[i][0] = 0;
-        d_y[i][0] = 0;
+        d_x[i] = 0;
+        d_y[i] = 0;
         for (size_t j = 0; j < mcell_num; ++j) {
             C_matrix[i][j] = 0;
         }
@@ -303,16 +357,144 @@ void Solver::setUpObject() {
                 if (net->inst_vec[j] == block) continue;
                 c_lamda = net->inst_vec[j]->cell_id;
                 if (net->inst_vec[j]->type == blockType::IO) {
-                    d_x[c][0] -= e * net->inst_vec[j]->center_x;
-                    d_y[c][0] -= e * net->inst_vec[j]->center_y;
+                    d_x[c] -= e * net->inst_vec[j]->center_x;
+                    d_y[c] -= e * net->inst_vec[j]->center_y;
                 } else {
                     C_matrix[c][c_lamda] -= e;
                 }
             }
         }
     }
+
+    for (auto &cell : inst) {
+        cell->size = height[cell->type];
+    }
+
+    // reserve space for D matrix and B matrix
+    D_matrix = new double*[mcell_num];
+    for (size_t i = 0; i < mcell_num; ++i) {
+        D_matrix[i] = new double[mcell_num];
+    }
+    B_matrix = new double*[mcell_num];
+    for (size_t i = 0; i < mcell_num; ++i) {
+        B_matrix[i] = new double[mcell_num];
+    }
+    region_area = new double[mcell_num];
+
+    C_matrix_tmp = new double*[mcell_num];
+    for (size_t i = 0; i < mcell_num; ++i) {
+        C_matrix_tmp[i] = new double[mcell_num];
+    }
+    d_x_tmp = new double[mcell_num];
+    d_y_tmp = new double[mcell_num];
+
+    D_matrix_inv = new double*[mcell_num];
+    for (size_t i = 0; i < mcell_num; ++i) {
+        D_matrix_inv[i] = new double[mcell_num];
+    }
+    Z = new double*[mcell_num];
+    for (size_t i = 0; i < mcell_num; ++i) {
+        Z[i] = new double[mcell_num];
+    }
 }
 
-void Solver::getGlobalMinimum() {
-    
+void Solver::setUpConstraint() {
+    memset(region_area, 0, sizeof(double) * region_num);
+    for (auto &cell : inst) {
+        region_area[cell->region_idx] += cell->size;
+    }
+
+    std::vector<std::vector<Block*>> region_info(region_num);
+    for (auto &cell : inst) {
+        region_info[cell->region_idx].push_back(cell);
+    }
+
+    // values for D matrix
+    for (size_t i = 0; i < region_num; ++i) { // row
+        for (size_t j = 0; j < region_num; ++j) { // col
+            D_matrix[i][j] = 0;
+        }
+        // the first cell of region_info[i] -> form a diagonal matrix
+        D_matrix[i][i] = region_info[i].front()->size / region_area[i];
+    }
+    int idx = 0;
+    // values for B matrix
+    for (size_t i = 0; i < region_num; ++i) {
+        for (size_t j = 0; j < (mcell_num - region_num); ++j) {
+            B_matrix[i][j] = 0;
+        }
+        // remaining cells of region_info[i]
+        for (size_t j = 1; j < region_info[i].size(); ++j) {
+            B_matrix[i][idx++] = region_info[i][j]->size / region_area[i];
+        }
+    }
+    // std::cout << "D_matrix: " << std::endl;
+    // for (size_t i = 0; i < region_num; ++i) {
+    //     for (size_t j = 0; j < region_num; ++j) {
+    //         std::cout << D_matrix[i][j] << ' ';
+    //     }
+    //     std::cout << std::endl;
+    // }
+    // std::cout << "B_matrix: " << std::endl;
+    // for (size_t i = 0; i < region_num; ++i) {
+    //     for (size_t j = 0; j < (mcell_num - region_num); ++j) {
+    //         std::cout << B_matrix[i][j] << ' ';
+    //     }
+    //     std::cout << std::endl;
+    // }
+
+    // values for d_x_tmp d_y_tmp C_matrix_tmp
+    std::vector<Block*> v;
+    for (size_t i = 0; i < region_num; ++i) {
+        v.push_back(region_info[i].front());
+    }
+    for (size_t i = 0; i < region_num; ++i) {
+        for (size_t j = 1; j < region_info[i].size(); ++j) {
+           v.push_back(region_info[i][j]);
+        }
+    }
+    for (size_t i = 0; i < mcell_num; ++i) {
+        d_x_tmp[i] = d_x[v[i]->cell_id];
+        d_y_tmp[i] = d_y[v[i]->cell_id];
+    }
+
+    for (size_t i = 0; i < mcell_num; ++i) {
+        for (size_t j = 0; j < mcell_num; ++j) {
+            C_matrix_tmp[i][j] = 0;
+            D_matrix_inv[i][j] = 0;
+        }
+        D_matrix_inv[i][i] = 1;
+    }
+    for (size_t i = 0; i < mcell_num; ++i) {
+        for (size_t j = 0; j < mcell_num; ++j) {
+            C_matrix_tmp[i][j] = C_matrix[v[i]->cell_id][v[j]->cell_id];
+        }
+    }
+    gauss_jordan(region_num, D_matrix, D_matrix_inv);
+
+    // calculate Z matrix
+    // first calculate -invD*B (region_num, mcell_num-region_num)
+    for (size_t i = 0; i < mcell_num; ++i) {
+        for (size_t j = 0; j < (mcell_num - region_num); ++j) {
+            Z[i][j] = 0;
+        }
+    }
+    for (size_t i = 0; i < region_num; ++i) {
+        for (size_t j = 0; j < (mcell_num - region_num); ++j) {
+            Z[i][j] = -matrixCalculation(i, j, D_matrix_inv, B_matrix, region_num);
+        }
+    }
+    for (size_t i = region_num; i < (mcell_num - region_num); ++i) {
+        Z[i][i] = 1;
+    }
+}
+
+void Solver::globalOptimize() {
+
+}
+
+void Solver::iterPlacePartition() {
+    // while (1) { // need to change k constraint to time constraint
+
+    // }
 }
