@@ -3,25 +3,27 @@
 
 class Solver {
 public:
-    Solver() : region_num(1) {}
+    Solver() {}
     ~Solver() {}
     void read(char *argv[]);
-    void makeWindow();
-    void setUpObject();
-    void setUpConstraint();
-    void globalOptimize();
-    void iterPlacePartition();
+    // void makeWindow();
+    void init_pop();
+    void fitness(gene&);
+    void parent_selection(parents&);
+    void crossover(parents&, std::vector<gene>&, int);
+    void mutation(std::vector<gene>&, int);
+    void survivor_selection(std::vector<gene>&);
+    void genetic_algorithm();
+    void output_file(char*);
 private:
-    std::vector<Block*> resource;
-    std::vector<Block*> inst;
+    std::vector<Block*> resource[4];
+    std::vector<Block*> inst[4];
     std::unordered_map<std::string, Block*> nameToResource;
     std::unordered_map<std::string, Block*> nameToInst;
     std::vector<Net*> net_vec;
 
     std::vector<std::vector<Block*>> window[4];
 
-    int mcell_num = 0, fcell_num = 0;
-    int region_num;
-    double **C_matrix;
-    double *d_x, *d_y;
+    std::vector<std::vector<int>> inst_to_net[4];
+    std::vector<gene> pool;
 };

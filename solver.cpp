@@ -2,74 +2,17 @@
 #include <fstream>
 #include <sstream>
 #include <algorithm>
+#include <random>
+#include <climits>
 #include <unordered_set>
-
+const int POP_SIZE = 100;
+const int TERMINATION = 500;
+const int K = 2;
 double min_y[4];
 double height[4];
 int unit[4];
-double *region_area;
-double **C_matrix_tmp;
-double *d_x_tmp, *d_y_tmp;
-double **D_matrix, **B_matrix;
-double **Z, **D_matrix_inv;
-double **tmp;
-std::vector<Block*> v;
-
-void first(int i, int m, double** arr, double** arr_1) { // 設定前導壹
-	double tmp;
-	int j;
-	tmp = arr[i][i];
-	for (j = 0; j < m; j++) {
-		arr[i][j] = arr[i][j] / tmp;
-		arr_1[i][j] = arr_1[i][j] / tmp;
-	}
-}
-
-void zero(int i, int m, double** arr, double** arr_1) { // 將前導壹的上下列變為零
-	int j, k;
-	double tmp;
-	for (j = 0; j < m; j++) {
-		if (j == i)
-			continue;
-		tmp = -1 * arr[j][i];
-		for (k = 0; k < m; k++) {
-			arr[j][k] = arr[j][k] + (tmp * arr[i][k]);
-			arr_1[j][k] = arr_1[j][k] + (tmp * arr_1[i][k]);
-		}
-	}
-}
-
-void gauss_jordan(int m, double** arr, double** arr_1) { // 高登-喬登消去法
-	int i, j;
-	double tmp;
-	for (i = 0; i < m; i++) {
-		if (arr[i][i] == 0) {
-			if (i == (m - 1)) {
-				break;
-			}
-			else {
-				for (j = 0; j < m; j++) {
-					arr[i][j] = arr[i][j] + arr[i + 1][j];
-					arr_1[i][j] = arr_1[i][j] + arr_1[i + 1][j];
-				}
-				first(i, m, arr, arr_1);
-				zero(i, m, arr, arr_1);
-			}
-		}
-		else {
-			first(i, m, arr, arr_1);
-			zero(i, m, arr, arr_1);
-		}
-	}
-}
-
-double matrixCalculation(size_t row, size_t col, double** m1, double** m2, int q) {
-    double val = 0;
-    for (int i = 0; i < q; ++i) {
-        val += (m1[row][i] * m2[i][col]);
-    }
-    return val;
-}
+int size[4];
+std::unordered_set<int> st1, st2;
 
 void Solver::read(char *argv[]) {
     std::string line;
@@ -101,8 +44,8 @@ void Solver::read(char *argv[]) {
                 // std::cout << "center y: " << info << std::endl;
                 center_y = std::stod(info);
                 // std::cout << "name: " << name << " type: " << block_type << " center x: " << center_x << " center_y: " << center_y << std::endl;
-                Block* resource_block = new Block(block_type, center_x, center_y);
-                resource.push_back(resource_block);
+                Block* resource_block = new Block(name, block_type, center_x, center_y);
+                resource[block_type].emplace_back(resource_block);
                 nameToResource[name] = resource_block;
             }
             n++;
@@ -110,6 +53,7 @@ void Solver::read(char *argv[]) {
     }
     fin.close();
 
+    int idx[4] = {0, 0, 0, 0};
     // second input file (inst)
     fin.open(argv[2]);
     while(getline(fin, line)) {
@@ -118,6 +62,7 @@ void Solver::read(char *argv[]) {
         std::string info, name;
         int block_type;
         double center_x, center_y;
+        int id;
         std::stringstream ss(line);
         while(getline(ss, info, ' ')) {
             if (n == 0) {
@@ -127,16 +72,16 @@ void Solver::read(char *argv[]) {
                 // std::cout << "type: " << info << ' ';
                 if (info == "CLB") {
                     block_type = blockType::CLB;
-                    mcell_num++;
+                    id = idx[blockType::CLB]++;
                 } else if (info == "RAM") {
                     block_type = blockType::RAM;
-                    mcell_num++;
+                    id = idx[blockType::RAM]++;
                 } else if (info == "DSP") {
                     block_type = blockType::DSP;
-                    mcell_num++;
+                    id = idx[blockType::DSP]++;
                 } else if (info == "IO") {
                     block_type = blockType::IO;
-                    fcell_num++;
+                    id = idx[blockType::IO]++;
                 } else {
                     std::cout << "[ERROR] read SECOND input file\n"; 
                 }
@@ -147,18 +92,22 @@ void Solver::read(char *argv[]) {
                 // std::cout << "center y: " << info << std::endl;
                 center_y = std::stod(info);
                 // std::cout << "name: " << name << " type: " << block_type << " center x: " << center_x << " center_y: " << center_y << std::endl;
-                Block* inst_block = new Block(block_type, center_x, center_y);
-                inst.push_back(inst_block);
+                Block* inst_block = new Block(name, block_type, center_x, center_y);
+                inst[block_type].emplace_back(inst_block);
                 nameToInst[name] = inst_block;
-
-                // update cell id (original)
-                inst_block->cell_id_org = inst.size() - 1;
-                inst_block->cell_id = inst.size() - 1;
+                inst_block->id = id;
             }
             n++;
         }
     }
     fin.close();
+
+    // for (auto& cell : inst[blockType::CLB]) std::cout << cell->id << ' ';
+    // std::cout << std::endl;
+    // for (auto& cell : inst[blockType::RAM]) std::cout << cell->id << ' ';
+    // std::cout << std::endl;
+    // for (auto& cell : inst[blockType::DSP]) std::cout << cell->id << ' ';
+    // std::cout << std::endl;
 
     // third input file (net info)
     fin.open(argv[3]);
@@ -172,31 +121,30 @@ void Solver::read(char *argv[]) {
             if (n == 0) {
                 net = new Net(info);
             } else {
-                net->inst_vec.push_back(nameToInst[info]);
+                net->inst_vec.emplace_back(nameToInst[info]);
             }
             n++;
         }
-        net_vec.push_back(net);
+        net_vec.emplace_back(net);
     }
     fin.close();
 
-    /*
-    for (auto &net : net_vec) {
-        net->init();
-        // std::cout << net->name << " HPWL: " << net->HPWL << std::endl;
+    // CLB
+    inst_to_net[blockType::CLB].resize(inst[blockType::CLB].size(), std::vector<int>(0));
+    // RAM
+    inst_to_net[blockType::RAM].resize(inst[blockType::RAM].size(), std::vector<int>(0));
+    // DSP
+    inst_to_net[blockType::DSP].resize(inst[blockType::DSP].size(), std::vector<int>(0));
+
+    for (int net_id = 0; net_id < net_vec.size(); ++net_id) {
+        for (auto &cell : net->inst_vec) {
+            if (cell->type == blockType::IO) continue;
+            else inst_to_net[cell->type][cell->id].emplace_back(net_id);
+        }
     }
-    */
-   
-    int cnt = 0;
-    for (auto &it : inst) {
-        if (it->type == blockType::IO) cnt++;
-        else it->cell_id -= cnt;
-    }
-    // for (auto &it : inst) {
-    //     std::cout << it->cell_id_org << ' ' << it->cell_id << std::endl;
-    // }
 }
 
+/*
 void Solver::makeWindow() {
     // stable_sort(resource.begin(), resource.end(), [](const Block* lhs, const Block* rhs){
     //     return lhs->center_x < rhs->center_x;
@@ -275,7 +223,6 @@ void Solver::makeWindow() {
         }
     });
     
-    /*
     for (auto &it : resource) {
         if (it->type == blockType::CLB) std::cout << "[CLB]";
         else if (it->type == blockType::RAM) std::cout << "[RAM]";
@@ -296,22 +243,21 @@ void Solver::makeWindow() {
         //     std::cout << "[ERROR] make window - 1\n";
         // }
     }   
-    */
 
     std::vector<Block*> single_window[4];
     int u = resource[0]->unit;
     for (auto &it : resource) {
         if (it->unit != u) {
-            window[blockType::CLB].push_back(single_window[blockType::CLB]);
-            window[blockType::RAM].push_back(single_window[blockType::RAM]);
-            window[blockType::DSP].push_back(single_window[blockType::DSP]);
+            window[blockType::CLB].emplace_back(single_window[blockType::CLB]);
+            window[blockType::RAM].emplace_back(single_window[blockType::RAM]);
+            window[blockType::DSP].emplace_back(single_window[blockType::DSP]);
             single_window[blockType::CLB].clear();
             single_window[blockType::RAM].clear();
             single_window[blockType::DSP].clear();
             u = it->unit;
-            single_window[it->type].push_back(it);
+            single_window[it->type].emplace_back(it);
         } else {
-            single_window[it->type].push_back(it);
+            single_window[it->type].emplace_back(it);
         }
     }
     // std::cout << "CLB: \n";
@@ -327,193 +273,284 @@ void Solver::makeWindow() {
     // for (auto &it : window[blockType::DSP]) std::cout << it.size() << ' ';
     // std::cout << std::endl;
 }
+*/
 
-void Solver::setUpObject() {
-    C_matrix = new double*[mcell_num];
-    for (size_t i = 0; i < mcell_num; ++i) {
-        C_matrix[i] = new double[mcell_num];
-    }
-    d_x = new double[mcell_num];
-    d_y = new double[mcell_num];
-
-    for (size_t i = 0; i < mcell_num; ++i) {
-        d_x[i] = 0;
-        d_y[i] = 0;
-        for (size_t j = 0; j < mcell_num; ++j) {
-            C_matrix[i][j] = 0;
-        }
-    }
-
-    double e;
-    Block* block;
+void Solver::fitness(gene& g) {
+    double min_x, min_y, max_x, max_y;
+    double fitness = 0;
     for (auto &net : net_vec) {
-        e = 2.0 / (double)net->inst_vec.size();
-        int c, c_lamda;
-        for (size_t i = 0; i < net->inst_vec.size(); ++i) {
-            block = net->inst_vec[i];
-            if (block->type == blockType::IO) continue;
-            c = block->cell_id;
-            C_matrix[c][c] += e * (net->inst_vec.size() - 1);
-
-            for (size_t j = 0; j < net->inst_vec.size(); ++j) {
-                if (net->inst_vec[j] == block) continue;
-                c_lamda = net->inst_vec[j]->cell_id;
-                if (net->inst_vec[j]->type == blockType::IO) {
-                    d_x[c] -= e * net->inst_vec[j]->center_x;
-                    d_y[c] -= e * net->inst_vec[j]->center_y;
-                } else {
-                    C_matrix[c][c_lamda] -= e;
-                }
+        min_x = INT_MAX;
+        min_y = INT_MAX;
+        max_x = INT_MIN;
+        max_y = INT_MIN;
+        for (auto &inst : net->inst_vec) {
+            if (inst->type == blockType::IO) {
+                if (inst->center_x < min_x) min_x = inst->center_x;
+                if (inst->center_x > max_x) max_x = inst->center_x;
+                if (inst->center_y < min_y) min_y = inst->center_y;
+                if (inst->center_y > max_y) max_y = inst->center_y;
+            } else {
+                if (resource[inst->type][g.resource_permu[inst->type][inst->id]]->center_x < min_x) min_x = resource[inst->type][g.resource_permu[inst->type][inst->id]]->center_x;
+                if (resource[inst->type][g.resource_permu[inst->type][inst->id]]->center_x > max_x) max_x = resource[inst->type][g.resource_permu[inst->type][inst->id]]->center_x;
+                if (resource[inst->type][g.resource_permu[inst->type][inst->id]]->center_y < min_y) min_y = resource[inst->type][g.resource_permu[inst->type][inst->id]]->center_y;
+                if (resource[inst->type][g.resource_permu[inst->type][inst->id]]->center_y > max_y) max_y = resource[inst->type][g.resource_permu[inst->type][inst->id]]->center_y;
             }
         }
+        fitness += (max_x - min_x) + (max_y - min_y);
     }
-
-    for (auto &cell : inst) {
-        cell->size = height[cell->type];
-    }
-
-    // reserve space for D matrix and B matrix
-    D_matrix = new double*[mcell_num];
-    for (size_t i = 0; i < mcell_num; ++i) {
-        D_matrix[i] = new double[mcell_num];
-    }
-    B_matrix = new double*[mcell_num];
-    for (size_t i = 0; i < mcell_num; ++i) {
-        B_matrix[i] = new double[mcell_num];
-    }
-    region_area = new double[mcell_num];
-
-    C_matrix_tmp = new double*[mcell_num];
-    for (size_t i = 0; i < mcell_num; ++i) {
-        C_matrix_tmp[i] = new double[mcell_num];
-    }
-    d_x_tmp = new double[mcell_num];
-    d_y_tmp = new double[mcell_num];
-
-    D_matrix_inv = new double*[mcell_num];
-    for (size_t i = 0; i < mcell_num; ++i) {
-        D_matrix_inv[i] = new double[mcell_num];
-    }
-    Z = new double*[mcell_num];
-    for (size_t i = 0; i < mcell_num; ++i) {
-        Z[i] = new double[mcell_num];
-    }
-    tmp = new double*[mcell_num];
-    for (size_t i = 0; i < mcell_num; ++i) {
-        tmp[i] = new double[mcell_num];
-    }
+    g.fitness = fitness;
 }
 
-void Solver::setUpConstraint() {
-    memset(region_area, 0, sizeof(double) * region_num);
-    for (auto &cell : inst) {
-        region_area[cell->region_idx] += cell->size;
+void Solver::init_pop() {
+    for (size_t i = 0; i < POP_SIZE; ++i) {
+        gene p;
+        // CLB
+        for (size_t j = 0; j < resource[blockType::CLB].size(); ++j) {
+            p.resource_permu[blockType::CLB].emplace_back(j);
+        }
+        for(size_t j = resource[blockType::CLB].size() - 1; j >= 1; --j) {
+            std::swap(p.resource_permu[blockType::CLB][j], p.resource_permu[blockType::CLB][rand() % j]);
+        }
+        // RAM
+        for (size_t j = 0; j < resource[blockType::RAM].size(); ++j) {
+            p.resource_permu[blockType::RAM].emplace_back(j);
+        }
+        for(size_t j = resource[blockType::RAM].size() - 1; j >= 1; --j) {
+            std::swap(p.resource_permu[blockType::RAM][j], p.resource_permu[blockType::RAM][rand() % j]);
+        }
+        // DSP
+        for (size_t j = 0; j < resource[blockType::DSP].size(); ++j) {
+            p.resource_permu[blockType::DSP].emplace_back(j);
+        }
+        for(size_t j = resource[blockType::DSP].size() - 1; j >= 1; --j) {
+            std::swap(p.resource_permu[blockType::DSP][j], p.resource_permu[blockType::DSP][rand() % j]);
+        }
+
+        pool.emplace_back(p);
     }
 
-    std::vector<std::vector<Block*>> region_info(region_num);
-    for (auto &cell : inst) {
-        region_info[cell->region_idx].push_back(cell);
-    }
-
-    // values for D matrix
-    for (size_t i = 0; i < region_num; ++i) { // row
-        for (size_t j = 0; j < region_num; ++j) { // col
-            D_matrix[i][j] = 0;
-        }
-        // the first cell of region_info[i] -> form a diagonal matrix
-        D_matrix[i][i] = region_info[i].front()->size / region_area[i];
-    }
-    int idx = 0;
-    // values for B matrix
-    for (size_t i = 0; i < region_num; ++i) {
-        for (size_t j = 0; j < (mcell_num - region_num); ++j) {
-            B_matrix[i][j] = 0;
-        }
-        // remaining cells of region_info[i]
-        for (size_t j = 1; j < region_info[i].size(); ++j) {
-            B_matrix[i][idx++] = region_info[i][j]->size / region_area[i];
-        }
-    }
-    // std::cout << "D_matrix: " << std::endl;
-    // for (size_t i = 0; i < region_num; ++i) {
-    //     for (size_t j = 0; j < region_num; ++j) {
-    //         std::cout << D_matrix[i][j] << ' ';
+    // for (size_t i = 0; i < pool.size(); ++i) {
+    //     std::cout << "CLB: " << std::endl;
+    //     for (size_t j = 0; j < pool[i].resource_permu[blockType::CLB].size(); ++j) {
+    //         std::cout << pool[i].resource_permu[blockType::CLB][j] << ' ';
     //     }
     //     std::cout << std::endl;
-    // }
-    // std::cout << "B_matrix: " << std::endl;
-    // for (size_t i = 0; i < region_num; ++i) {
-    //     for (size_t j = 0; j < (mcell_num - region_num); ++j) {
-    //         std::cout << B_matrix[i][j] << ' ';
+    //     std::cout << "RAM: " << std::endl;
+    //     for (size_t j = 0; j < pool[i].resource_permu[blockType::RAM].size(); ++j) {
+    //         std::cout << pool[i].resource_permu[blockType::RAM][j] << ' ';
+    //     }
+    //     std::cout << std::endl;
+    //     std::cout << "DSP: " << std::endl;
+    //     for (size_t j = 0; j < pool[i].resource_permu[blockType::DSP].size(); ++j) {
+    //         std::cout << pool[i].resource_permu[blockType::DSP][j] << ' ';
     //     }
     //     std::cout << std::endl;
     // }
 
-    // values for d_x_tmp d_y_tmp C_matrix_tmp
-    v.clear();
-    for (size_t i = 0; i < region_num; ++i) {
-        v.push_back(region_info[i].front());
-    }
-    for (size_t i = 0; i < region_num; ++i) {
-        for (size_t j = 1; j < region_info[i].size(); ++j) {
-           v.push_back(region_info[i][j]);
-        }
-    }
-    for (size_t i = 0; i < mcell_num; ++i) {
-        d_x_tmp[i] = d_x[v[i]->cell_id];
-        d_y_tmp[i] = d_y[v[i]->cell_id];
-    }
+    for (auto &g : pool) fitness(g);
+    std::sort(pool.begin(), pool.end(), [](const gene& lhs, const gene& rhs){
+        return lhs.fitness < rhs.fitness;
+    });
 
-    for (size_t i = 0; i < mcell_num; ++i) {
-        for (size_t j = 0; j < mcell_num; ++j) {
-            C_matrix_tmp[i][j] = 0;
-            D_matrix_inv[i][j] = 0;
-        }
-        D_matrix_inv[i][i] = 1;
-    }
-    for (size_t i = 0; i < mcell_num; ++i) {
-        for (size_t j = 0; j < mcell_num; ++j) {
-            C_matrix_tmp[i][j] = C_matrix[v[i]->cell_id][v[j]->cell_id];
-        }
-    }
-    gauss_jordan(region_num, D_matrix, D_matrix_inv);
+    std::cout << pool[0].fitness << std:: endl;
+}
 
-    // calculate Z matrix
-    // first calculate -invD*B (region_num, mcell_num-region_num)
-    for (size_t i = 0; i < mcell_num; ++i) {
-        for (size_t j = 0; j < (mcell_num - region_num); ++j) {
-            Z[i][j] = 0;
+void Solver::parent_selection(parents& parent) {
+    std::sort(pool.begin(), pool.end(), [](const gene& lhs, const gene& rhs){
+        return lhs.fitness < rhs.fitness;
+    });
+    int idx1, idx2;
+    idx1 = idx2 = INT_MAX;
+    for (int i = 0, tmp1, tmp2; i < K; ++i) {
+        tmp1 = rand() % pool.size();
+        tmp2 = rand() % pool.size();
+        idx1 = std::min(idx1, tmp1);
+        idx2 = std::min(idx2, tmp2);
+    }
+    parent.first = pool[idx1];
+    parent.second = pool[(idx1 != idx2) ? idx2 : idx2 + 1];
+}
+
+void Solver::crossover(parents& parent, std::vector<gene>& offspring, int type) {
+    gene child1, child2;
+    child1.resource_permu[blockType::CLB].resize(resource[blockType::CLB].size(), 0);
+    child1.resource_permu[blockType::RAM].resize(resource[blockType::RAM].size(), 0);
+    child1.resource_permu[blockType::DSP].resize(resource[blockType::DSP].size(), 0);
+    child2.resource_permu[blockType::CLB].resize(resource[blockType::CLB].size(), 0);
+    child2.resource_permu[blockType::RAM].resize(resource[blockType::RAM].size(), 0);
+    child2.resource_permu[blockType::DSP].resize(resource[blockType::DSP].size(), 0);
+    
+    if (type == 0) { // order crossover
+        int tmp1, tmp2;
+        // CLB
+        do {
+            tmp1 = rand() % resource[blockType::CLB].size();
+            tmp2 = rand() % resource[blockType::CLB].size();
+        } while (tmp1 == tmp2);
+        if (tmp1 > tmp2) std::swap(tmp1, tmp2);
+        for (size_t i = tmp1; i <= tmp2; ++i) {
+            child1.resource_permu[blockType::CLB][i] = parent.first.resource_permu[blockType::CLB][i];
+            child2.resource_permu[blockType::CLB][i] = parent.second.resource_permu[blockType::CLB][i];
+        }
+        st1.clear();
+        st2.clear();
+        for (size_t i = tmp1; i <= tmp2; ++i) {
+            st1.insert(parent.first.resource_permu[blockType::CLB][i]);
+            st2.insert(parent.second.resource_permu[blockType::CLB][i]);
+        }
+        int idx2 = tmp2 + 1, idx1 = tmp2 + 1;
+        for (int i = tmp2 + 1; i < resource[blockType::CLB].size(); ++i) {
+            while (st1.find(parent.second.resource_permu[blockType::CLB][idx2]) != st1.end()) idx2++;
+            child1.resource_permu[blockType::CLB][i] = parent.second.resource_permu[blockType::CLB][idx2 % resource[blockType::CLB].size()];
+            while (st2.find(parent.second.resource_permu[blockType::CLB][idx1]) != st1.end()) idx1++;
+            child2.resource_permu[blockType::CLB][i] = parent.first.resource_permu[blockType::CLB][idx1 % resource[blockType::CLB].size()];
+        }
+        for (int i = 0; i < tmp1; ++i) {
+            while (st1.find(parent.second.resource_permu[blockType::CLB][idx2]) != st1.end()) idx2++;
+            child1.resource_permu[blockType::CLB][i] = parent.second.resource_permu[blockType::CLB][idx2 % resource[blockType::CLB].size()];
+            while (st2.find(parent.second.resource_permu[blockType::CLB][idx1]) != st1.end()) idx1++;
+            child2.resource_permu[blockType::CLB][i] = parent.first.resource_permu[blockType::CLB][idx1 % resource[blockType::CLB].size()];
+        }
+
+        // RAM
+        // child1.resource_permu[blockType::RAM] = parent.first.resource_permu[blockType::RAM];
+        // child2.resource_permu[blockType::RAM] = parent.first.resource_permu[blockType::RAM];
+        do {
+            tmp1 = rand() % resource[blockType::RAM].size();
+            tmp2 = rand() % resource[blockType::RAM].size();
+        } while (tmp1 == tmp2);
+        if (tmp1 > tmp2) std::swap(tmp1, tmp2);
+        for (size_t i = tmp1; i <= tmp2; ++i) {
+            child1.resource_permu[blockType::RAM][i] = parent.first.resource_permu[blockType::RAM][i];
+            child2.resource_permu[blockType::RAM][i] = parent.second.resource_permu[blockType::RAM][i];
+        }
+        st1.clear();
+        st2.clear();
+        for (size_t i = tmp1; i <= tmp2; ++i) {
+            st1.insert(parent.first.resource_permu[blockType::RAM][i]);
+            st2.insert(parent.second.resource_permu[blockType::RAM][i]);
+        }
+        idx2 = tmp2 + 1, idx1 = tmp2 + 1;
+        for (int i = tmp2 + 1; i < resource[blockType::RAM].size(); ++i) {
+            while (st1.find(parent.second.resource_permu[blockType::RAM][idx2]) != st1.end()) idx2++;
+            child1.resource_permu[blockType::RAM][i] = parent.second.resource_permu[blockType::RAM][idx2 % resource[blockType::RAM].size()];
+            while (st2.find(parent.second.resource_permu[blockType::RAM][idx1]) != st1.end()) idx1++;
+            child2.resource_permu[blockType::RAM][i] = parent.first.resource_permu[blockType::RAM][idx1 % resource[blockType::RAM].size()];
+        }
+        for (int i = 0; i < tmp1; ++i) {
+            while (st1.find(parent.second.resource_permu[blockType::RAM][idx2]) != st1.end()) idx2++;
+            child1.resource_permu[blockType::RAM][i] = parent.second.resource_permu[blockType::RAM][idx2 % resource[blockType::RAM].size()];
+            while (st2.find(parent.second.resource_permu[blockType::RAM][idx1]) != st1.end()) idx1++;
+            child2.resource_permu[blockType::RAM][i] = parent.first.resource_permu[blockType::RAM][idx1 % resource[blockType::RAM].size()];
+        }
+
+        // DSP
+        // child1.resource_permu[blockType::DSP] = parent.first.resource_permu[blockType::DSP];
+        // child2.resource_permu[blockType::DSP] = parent.first.resource_permu[blockType::DSP];
+        do {
+            tmp1 = rand() % resource[blockType::DSP].size();
+            tmp2 = rand() % resource[blockType::DSP].size();
+        } while (tmp1 == tmp2);
+        if (tmp1 > tmp2) std::swap(tmp1, tmp2);
+        for (size_t i = tmp1; i <= tmp2; ++i) {
+            child1.resource_permu[blockType::DSP][i] = parent.first.resource_permu[blockType::DSP][i];
+            child2.resource_permu[blockType::DSP][i] = parent.second.resource_permu[blockType::DSP][i];
+        }
+        st1.clear();
+        st2.clear();
+        for (size_t i = tmp1; i <= tmp2; ++i) {
+            st1.insert(parent.first.resource_permu[blockType::DSP][i]);
+            st2.insert(parent.second.resource_permu[blockType::DSP][i]);
+        }
+        idx2 = tmp2 + 1, idx1 = tmp2 + 1;
+        for (int i = tmp2 + 1; i < resource[blockType::DSP].size(); ++i) {
+            while (st1.find(parent.second.resource_permu[blockType::DSP][idx2]) != st1.end()) idx2++;
+            child1.resource_permu[blockType::DSP][i] = parent.second.resource_permu[blockType::DSP][idx2 % resource[blockType::DSP].size()];
+            while (st2.find(parent.second.resource_permu[blockType::DSP][idx1]) != st1.end()) idx1++;
+            child2.resource_permu[blockType::DSP][i] = parent.first.resource_permu[blockType::DSP][idx1 % resource[blockType::DSP].size()];
+        }
+        for (int i = 0; i < tmp1; ++i) {
+            while (st1.find(parent.second.resource_permu[blockType::DSP][idx2]) != st1.end()) idx2++;
+            child1.resource_permu[blockType::DSP][i] = parent.second.resource_permu[blockType::DSP][idx2 % resource[blockType::DSP].size()];
+            while (st2.find(parent.second.resource_permu[blockType::DSP][idx1]) != st1.end()) idx1++;
+            child2.resource_permu[blockType::DSP][i] = parent.first.resource_permu[blockType::DSP][idx1 % resource[blockType::DSP].size()];
         }
     }
-    for (size_t i = 0; i < region_num; ++i) {
-        for (size_t j = 0; j < (mcell_num - region_num); ++j) {
-            Z[i][j] = -matrixCalculation(i, j, D_matrix_inv, B_matrix, region_num);
-        }
-    }
-    for (size_t i = region_num; i < (mcell_num - region_num); ++i) {
-        Z[i][i] = 1;
+    offspring.emplace_back(child1);
+    offspring.emplace_back(child2);
+}
+
+void Solver::mutation(std::vector<gene>& offspring, int type) {
+    if (type == 0) { // swap mutation
+        int tmp1, tmp2;
+        // CLB
+        tmp1 = rand() % inst[blockType::CLB].size();
+        tmp2 = rand() % inst[blockType::CLB].size();
+        std::swap(offspring[offspring.size() - 1].resource_permu[blockType::CLB][tmp1], offspring[offspring.size() - 1].resource_permu[blockType::CLB][tmp2]);
+        tmp1 = rand() % inst[blockType::CLB].size();
+        tmp2 = rand() % inst[blockType::CLB].size();
+        std::swap(offspring[offspring.size() - 2].resource_permu[blockType::CLB][tmp1], offspring[offspring.size() - 2].resource_permu[blockType::CLB][tmp2]);
+
+        // RAM
+        tmp1 = rand() % inst[blockType::RAM].size();
+        tmp2 = rand() % inst[blockType::RAM].size();
+        std::swap(offspring[offspring.size() - 1].resource_permu[blockType::RAM][tmp1], offspring[offspring.size() - 1].resource_permu[blockType::RAM][tmp2]);
+        tmp1 = rand() % inst[blockType::RAM].size();
+        tmp2 = rand() % inst[blockType::RAM].size();
+        std::swap(offspring[offspring.size() - 2].resource_permu[blockType::RAM][tmp1], offspring[offspring.size() - 2].resource_permu[blockType::RAM][tmp2]);
+
+        // DSP
+        tmp1 = rand() % inst[blockType::DSP].size();
+        tmp2 = rand() % inst[blockType::DSP].size();
+        std::swap(offspring[offspring.size() - 1].resource_permu[blockType::DSP][tmp1], offspring[offspring.size() - 1].resource_permu[blockType::DSP][tmp2]);
+        tmp1 = rand() % inst[blockType::DSP].size();
+        tmp2 = rand() % inst[blockType::DSP].size();
+        std::swap(offspring[offspring.size() - 2].resource_permu[blockType::DSP][tmp1], offspring[offspring.size() - 2].resource_permu[blockType::DSP][tmp2]);
+
+        fitness(offspring[offspring.size() - 1]);
+        fitness(offspring[offspring.size() - 2]);
     }
 }
 
-void Solver::globalOptimize() {
-    // first calculate cT
+void Solver::survivor_selection(std::vector<gene>& new_genes) {
+    pool.insert(pool.end(), new_genes.begin(), new_genes.end());
+    std::sort(pool.begin(), pool.end(), [](const gene& lhs, const gene& rhs){
+        return lhs.fitness < rhs.fitness;
+    });
+    pool = std::vector<gene>(pool.begin(), pool.begin() + POP_SIZE);
+}
 
-    // second calculate ZTCZ
-    double val = 0;
-    for (size_t row = 0; row < (mcell_num - region_num); ++row) {
-        for (size_t col = 0; col < (mcell_num - region_num); ++col) {
-            tmp[row][col] = 0;
-            for (size_t i = 0; i < mcell_num; ++i) {
-                for (size_t j = 0; j < mcell_num; ++j) {
-                    tmp[row][col] += Z[i][row] * C_matrix_tmp[i][j] * Z[i][col];
-                }
-            }
+void Solver::genetic_algorithm() {
+    parents parent;
+    std::vector<gene> offspring;
+    for (int i = 0; i < TERMINATION; ++i) {
+        for (int j = 0; j < POP_SIZE / 2; ++j) {
+            parent_selection(parent);
+            // std::cout << "finish parent selection\n";
+            crossover(parent, offspring, 0);
+            // std::cout << "finish crossover\n";
+            mutation(offspring, 0);
+            // std::cout << "finish mutation\n";
         }
+        survivor_selection(offspring);
+        offspring.clear();
+        std::cout << "[round " << i+1 << "]: " << pool[0].fitness << std::endl;
     }
 }
 
-void Solver::iterPlacePartition() {
-    // while (1) { // need to change k constraint to time constraint
-
-    // }
+void Solver::output_file(char* output_file) {
+    std::ofstream fout;
+    fout.open(output_file);
+    for (size_t i = 0; i < inst[blockType::CLB].size(); ++i) {
+        fout << inst[blockType::CLB][i]->name << " " << resource[blockType::CLB][pool[0].resource_permu[blockType::CLB][i]]->name << std::endl;
+    }
+    for (size_t i = 0; i < inst[blockType::RAM].size(); ++i) {
+        fout << inst[blockType::RAM][i]->name << " " << resource[blockType::RAM][pool[0].resource_permu[blockType::RAM][i]]->name << std::endl;
+    }
+    for (size_t i = 0; i < inst[blockType::DSP].size(); ++i) {
+        fout << inst[blockType::DSP][i]->name << " " << resource[blockType::DSP][pool[0].resource_permu[blockType::DSP][i]]->name << std::endl;
+    }
+    fout.close();
 }
+
+

@@ -11,28 +11,23 @@ enum blockType {
 };
 
 struct Block {
+    std::string name;
     int type;
     double center_x, center_y;
     int layer, unit;
-    double size;
-    int cell_id_org, cell_id;
-    int region_idx;
-    Block(int t, double x, double y) : type(t), center_x(x), center_y(y), region_idx(0) {}
+    int id;
+    Block(std::string n, int t, double x, double y) : name(n), type(t), center_x(x), center_y(y) {}
 };
 
 struct Net {
     std::string name;
     std::vector<Block*> inst_vec;
-    double min_x, min_y, max_x, max_y;
-    double HPWL;
-    Net(std::string name) : name(name), min_x(INT_MAX), min_y(INT_MAX), max_x(INT_MIN), max_y(INT_MIN) {}
-    void init() {
-        for (auto &inst : inst_vec) {
-            if (inst->center_x < min_x) min_x = inst->center_x;
-            if (inst->center_x > max_x) max_x = inst->center_x;
-            if (inst->center_y < min_y) min_y = inst->center_y;
-            if (inst->center_y > max_y) max_y = inst->center_y;
-        }
-        HPWL = (max_x - min_x) + (max_y - min_y);
-    }
+    Net(std::string name) : name(name) {}
 };
+
+struct gene {
+    double fitness;
+    std::vector<int> resource_permu[4]; // store resource block (vector index means the instance)
+};
+
+typedef std::pair<gene, gene> parents;
