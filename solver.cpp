@@ -6,7 +6,7 @@
 #include <climits>
 #include <unordered_set>
 const int POP_SIZE = 100;
-const int TERMINATION = 500;
+const int TERMINATION = 100;
 const int K = 2;
 double min_y[4];
 double height[4];
@@ -383,98 +383,131 @@ void Solver::crossover(parents& parent, std::vector<gene>& offspring, int type) 
     if (type == 0) { // order crossover
         int tmp1, tmp2;
         // CLB
+        child1.resource_permu[blockType::CLB] = parent.first.resource_permu[blockType::CLB];
+        child2.resource_permu[blockType::CLB] = parent.second.resource_permu[blockType::CLB];
         do {
             tmp1 = rand() % resource[blockType::CLB].size();
             tmp2 = rand() % resource[blockType::CLB].size();
         } while (tmp1 == tmp2);
         if (tmp1 > tmp2) std::swap(tmp1, tmp2);
-        for (size_t i = tmp1; i <= tmp2; ++i) {
-            child1.resource_permu[blockType::CLB][i] = parent.first.resource_permu[blockType::CLB][i];
-            child2.resource_permu[blockType::CLB][i] = parent.second.resource_permu[blockType::CLB][i];
-        }
         st1.clear();
         st2.clear();
         for (size_t i = tmp1; i <= tmp2; ++i) {
             st1.insert(parent.first.resource_permu[blockType::CLB][i]);
             st2.insert(parent.second.resource_permu[blockType::CLB][i]);
         }
-        int idx2 = tmp2 + 1, idx1 = tmp2 + 1;
+        int idx2 = tmp2, idx1 = tmp2;
         for (int i = tmp2 + 1; i < resource[blockType::CLB].size(); ++i) {
-            while (st1.find(parent.second.resource_permu[blockType::CLB][idx2]) != st1.end()) idx2++;
+            idx2++;
+            while (st1.find(parent.second.resource_permu[blockType::CLB][idx2 % resource[blockType::CLB].size()]) != st1.end()) {
+                idx2++;
+            }
             child1.resource_permu[blockType::CLB][i] = parent.second.resource_permu[blockType::CLB][idx2 % resource[blockType::CLB].size()];
-            while (st2.find(parent.second.resource_permu[blockType::CLB][idx1]) != st1.end()) idx1++;
+
+            idx1++;
+            while (st2.find(parent.first.resource_permu[blockType::CLB][idx1 % resource[blockType::CLB].size()]) != st2.end()) {
+                idx1++;
+            }
             child2.resource_permu[blockType::CLB][i] = parent.first.resource_permu[blockType::CLB][idx1 % resource[blockType::CLB].size()];
         }
         for (int i = 0; i < tmp1; ++i) {
-            while (st1.find(parent.second.resource_permu[blockType::CLB][idx2]) != st1.end()) idx2++;
+            idx2++;
+            while (st1.find(parent.second.resource_permu[blockType::CLB][idx2 % resource[blockType::CLB].size()]) != st1.end()) {
+                idx2++;
+            }
             child1.resource_permu[blockType::CLB][i] = parent.second.resource_permu[blockType::CLB][idx2 % resource[blockType::CLB].size()];
-            while (st2.find(parent.second.resource_permu[blockType::CLB][idx1]) != st1.end()) idx1++;
+
+            idx1++;
+            while (st2.find(parent.first.resource_permu[blockType::CLB][idx1 % resource[blockType::CLB].size()]) != st2.end()) {
+                idx1++;
+            }
             child2.resource_permu[blockType::CLB][i] = parent.first.resource_permu[blockType::CLB][idx1 % resource[blockType::CLB].size()];
         }
 
         // RAM
-        // child1.resource_permu[blockType::RAM] = parent.first.resource_permu[blockType::RAM];
-        // child2.resource_permu[blockType::RAM] = parent.first.resource_permu[blockType::RAM];
+        child1.resource_permu[blockType::RAM] = parent.first.resource_permu[blockType::RAM];
+        child2.resource_permu[blockType::RAM] = parent.second.resource_permu[blockType::RAM];
         do {
             tmp1 = rand() % resource[blockType::RAM].size();
             tmp2 = rand() % resource[blockType::RAM].size();
         } while (tmp1 == tmp2);
         if (tmp1 > tmp2) std::swap(tmp1, tmp2);
-        for (size_t i = tmp1; i <= tmp2; ++i) {
-            child1.resource_permu[blockType::RAM][i] = parent.first.resource_permu[blockType::RAM][i];
-            child2.resource_permu[blockType::RAM][i] = parent.second.resource_permu[blockType::RAM][i];
-        }
         st1.clear();
         st2.clear();
         for (size_t i = tmp1; i <= tmp2; ++i) {
             st1.insert(parent.first.resource_permu[blockType::RAM][i]);
             st2.insert(parent.second.resource_permu[blockType::RAM][i]);
         }
-        idx2 = tmp2 + 1, idx1 = tmp2 + 1;
+        idx2 = tmp2, idx1 = tmp2;
         for (int i = tmp2 + 1; i < resource[blockType::RAM].size(); ++i) {
-            while (st1.find(parent.second.resource_permu[blockType::RAM][idx2]) != st1.end()) idx2++;
+            idx2++;
+            while (st1.find(parent.second.resource_permu[blockType::RAM][idx2 % resource[blockType::RAM].size()]) != st1.end()) {
+                idx2++;
+            }
             child1.resource_permu[blockType::RAM][i] = parent.second.resource_permu[blockType::RAM][idx2 % resource[blockType::RAM].size()];
-            while (st2.find(parent.second.resource_permu[blockType::RAM][idx1]) != st1.end()) idx1++;
+
+            idx1++;
+            while (st2.find(parent.first.resource_permu[blockType::RAM][idx1 % resource[blockType::RAM].size()]) != st2.end()) {
+                idx1++;
+            }
             child2.resource_permu[blockType::RAM][i] = parent.first.resource_permu[blockType::RAM][idx1 % resource[blockType::RAM].size()];
         }
         for (int i = 0; i < tmp1; ++i) {
-            while (st1.find(parent.second.resource_permu[blockType::RAM][idx2]) != st1.end()) idx2++;
+            idx2++;
+            while (st1.find(parent.second.resource_permu[blockType::RAM][idx2 % resource[blockType::RAM].size()]) != st1.end()) {
+                idx2++;
+            }
             child1.resource_permu[blockType::RAM][i] = parent.second.resource_permu[blockType::RAM][idx2 % resource[blockType::RAM].size()];
-            while (st2.find(parent.second.resource_permu[blockType::RAM][idx1]) != st1.end()) idx1++;
+
+            idx1++;
+            while (st2.find(parent.first.resource_permu[blockType::RAM][idx1 % resource[blockType::RAM].size()]) != st2.end()) {
+                idx1++;
+            }
             child2.resource_permu[blockType::RAM][i] = parent.first.resource_permu[blockType::RAM][idx1 % resource[blockType::RAM].size()];
         }
 
         // DSP
-        // child1.resource_permu[blockType::DSP] = parent.first.resource_permu[blockType::DSP];
-        // child2.resource_permu[blockType::DSP] = parent.first.resource_permu[blockType::DSP];
+        child1.resource_permu[blockType::DSP] = parent.first.resource_permu[blockType::DSP];
+        child2.resource_permu[blockType::DSP] = parent.second.resource_permu[blockType::DSP];
         do {
             tmp1 = rand() % resource[blockType::DSP].size();
             tmp2 = rand() % resource[blockType::DSP].size();
         } while (tmp1 == tmp2);
         if (tmp1 > tmp2) std::swap(tmp1, tmp2);
-        for (size_t i = tmp1; i <= tmp2; ++i) {
-            child1.resource_permu[blockType::DSP][i] = parent.first.resource_permu[blockType::DSP][i];
-            child2.resource_permu[blockType::DSP][i] = parent.second.resource_permu[blockType::DSP][i];
-        }
         st1.clear();
         st2.clear();
         for (size_t i = tmp1; i <= tmp2; ++i) {
             st1.insert(parent.first.resource_permu[blockType::DSP][i]);
             st2.insert(parent.second.resource_permu[blockType::DSP][i]);
         }
-        idx2 = tmp2 + 1, idx1 = tmp2 + 1;
+        idx2 = tmp2, idx1 = tmp2;
         for (int i = tmp2 + 1; i < resource[blockType::DSP].size(); ++i) {
-            while (st1.find(parent.second.resource_permu[blockType::DSP][idx2]) != st1.end()) idx2++;
+            idx2++;
+            while (st1.find(parent.second.resource_permu[blockType::DSP][idx2 % resource[blockType::DSP].size()]) != st1.end()) {
+                idx2++;
+            }
             child1.resource_permu[blockType::DSP][i] = parent.second.resource_permu[blockType::DSP][idx2 % resource[blockType::DSP].size()];
-            while (st2.find(parent.second.resource_permu[blockType::DSP][idx1]) != st1.end()) idx1++;
+
+            idx1++;
+            while (st2.find(parent.first.resource_permu[blockType::DSP][idx1 % resource[blockType::DSP].size()]) != st2.end()) {
+                idx1++;
+            }
             child2.resource_permu[blockType::DSP][i] = parent.first.resource_permu[blockType::DSP][idx1 % resource[blockType::DSP].size()];
         }
         for (int i = 0; i < tmp1; ++i) {
-            while (st1.find(parent.second.resource_permu[blockType::DSP][idx2]) != st1.end()) idx2++;
+            idx2++;
+            while (st1.find(parent.second.resource_permu[blockType::DSP][idx2 % resource[blockType::DSP].size()]) != st1.end()) {
+                idx2++;
+            }
             child1.resource_permu[blockType::DSP][i] = parent.second.resource_permu[blockType::DSP][idx2 % resource[blockType::DSP].size()];
-            while (st2.find(parent.second.resource_permu[blockType::DSP][idx1]) != st1.end()) idx1++;
+
+            idx1++;
+            while (st2.find(parent.first.resource_permu[blockType::DSP][idx1 % resource[blockType::DSP].size()]) != st2.end()) {
+                idx1++;
+            }
             child2.resource_permu[blockType::DSP][i] = parent.first.resource_permu[blockType::DSP][idx1 % resource[blockType::DSP].size()];
         }
+        
     }
     offspring.emplace_back(child1);
     offspring.emplace_back(child2);
