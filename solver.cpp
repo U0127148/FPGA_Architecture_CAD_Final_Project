@@ -5,6 +5,7 @@
 #include <random>
 #include <climits>
 #include <unordered_set>
+#include <unordered_map>
 const int POP_SIZE = 100;
 const int TERMINATION = 100;
 const int K = 2;
@@ -14,6 +15,7 @@ int unit[4];
 int size[4];
 std::unordered_set<int> st1, st2;
 int *mod_table[4];
+std::unordered_map<int, int> m; // (child1 value, child1 index)
 
 void Solver::build_mod_table() {
     int mod = 0;
@@ -540,6 +542,63 @@ void Solver::crossover(parents& parent, std::vector<gene>& offspring, int type) 
             }
             child2.resource_permu[blockType::DSP][i] = parent.first.resource_permu[blockType::DSP][mod_table[blockType::DSP][idx1]];
         }
+    } else if (type == 1) { // cycle crossover
+        // CLB
+        child1.resource_permu[blockType::CLB] = parent.first.resource_permu[blockType::CLB];
+        child2.resource_permu[blockType::CLB] = parent.second.resource_permu[blockType::CLB];
+        int turn = 0, val1;
+        m.clear();
+        for (int i = 0; i < resource[blockType::CLB].size(); ++i) {
+            if (!m.count(child1.resource_permu[blockType::CLB][i])) m[child1.resource_permu[blockType::CLB][i]] = i;
+        }
+        while (!m.empty()) {
+            val1 = m.begin()->first; // child1's value = child2's index
+            while (1) {
+                if (!m.count(val1)) break; // a cycle has been formed
+                if (turn & 1) std::swap(child1.resource_permu[blockType::CLB][m[val1]], child2.resource_permu[blockType::CLB][val1]);
+                val1 = child1.resource_permu[blockType::CLB][m[val1]];
+                m.erase(val1);
+            }
+            turn++;
+        }
+        
+        // RAM
+        child1.resource_permu[blockType::RAM] = parent.first.resource_permu[blockType::RAM];
+        child2.resource_permu[blockType::RAM] = parent.second.resource_permu[blockType::RAM];
+        turn = 0;
+        m.clear();
+        for (int i = 0; i < resource[blockType::RAM].size(); ++i) {
+            if (!m.count(child1.resource_permu[blockType::RAM][i])) m[child1.resource_permu[blockType::RAM][i]] = i;
+        }
+        while (!m.empty()) {
+            val1 = m.begin()->first; // child1's value = child2's index
+            while (1) {
+                if (!m.count(val1)) break; // a cycle has been formed
+                if (turn & 1) std::swap(child1.resource_permu[blockType::RAM][m[val1]], child2.resource_permu[blockType::RAM][val1]);
+                val1 = child1.resource_permu[blockType::RAM][m[val1]];
+                m.erase(val1);
+            }
+            turn++;
+        }
+
+        // DSP
+        child1.resource_permu[blockType::DSP] = parent.first.resource_permu[blockType::DSP];
+        child2.resource_permu[blockType::DSP] = parent.second.resource_permu[blockType::DSP];
+        turn = 0;
+        m.clear();
+        for (int i = 0; i < resource[blockType::DSP].size(); ++i) {
+            if (!m.count(child1.resource_permu[blockType::DSP][i])) m[child1.resource_permu[blockType::DSP][i]] = i;
+        }
+        while (!m.empty()) {
+            val1 = m.begin()->first; // child1's value = child2's index
+            while (1) {
+                if (!m.count(val1)) break; // a cycle has been formed
+                if (turn & 1) std::swap(child1.resource_permu[blockType::DSP][m[val1]], child2.resource_permu[blockType::DSP][val1]);
+                val1 = child1.resource_permu[blockType::DSP][m[val1]];
+                m.erase(val1);
+            }
+            turn++;
+        }
     }
     offspring.emplace_back(child1);
     offspring.emplace_back(child2);
@@ -592,7 +651,7 @@ void Solver::genetic_algorithm() {
         for (int j = 0; j < POP_SIZE / 2; ++j) {
             parent_selection(parent);
             // std::cout << "finish parent selection\n";
-            crossover(parent, offspring, 0);
+            crossover(parent, offspring, 1);
             // std::cout << "finish crossover\n";
             mutation(offspring, 0);
             // std::cout << "finish mutation\n";
