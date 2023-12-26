@@ -6,8 +6,9 @@
 #include <climits>
 #include <unordered_set>
 #include <unordered_map>
+#include <chrono>
 const int POP_SIZE = 100;
-const int TERMINATION = 100;
+// const int TERMINATION = 500;
 const int K = 2;
 double min_y[4];
 double height[4];
@@ -397,8 +398,8 @@ void Solver::parent_selection(parents& parent) {
     int idx1, idx2;
     idx1 = idx2 = INT_MAX;
     for (int i = 0, tmp1, tmp2; i < K; ++i) {
-        tmp1 = rand() % pool.size();
-        tmp2 = rand() % pool.size();
+        tmp1 = rand() % (POP_SIZE - 1);
+        tmp2 = rand() % (POP_SIZE - 1);
         idx1 = std::min(idx1, tmp1);
         idx2 = std::min(idx2, tmp2);
     }
@@ -647,7 +648,9 @@ void Solver::survivor_selection(std::vector<gene>& new_genes) {
 void Solver::genetic_algorithm() {
     parents parent;
     std::vector<gene> offspring;
-    for (int i = 0; i < TERMINATION; ++i) {
+    auto start = std::chrono::steady_clock::now();
+    std::chrono::duration<long long, std::ratio<60>> time_in_sec;
+    do {
         for (int j = 0; j < POP_SIZE / 2; ++j) {
             parent_selection(parent);
             // std::cout << "finish parent selection\n";
@@ -658,8 +661,10 @@ void Solver::genetic_algorithm() {
         }
         survivor_selection(offspring);
         offspring.clear();
-        std::cout << "[round " << i+1 << "]: " << pool[0].fitness << std::endl;
-    }
+        std::cout << pool[0].fitness << std::endl;
+        auto elapsed = std::chrono::steady_clock::now() - start;
+        time_in_sec = std::chrono::duration_cast<std::chrono::minutes>(elapsed);
+    } while (time_in_sec < std::chrono::minutes(9));
 }
 
 void Solver::output_file(char* output_file) {
