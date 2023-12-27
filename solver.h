@@ -6,12 +6,14 @@ public:
     Solver() {}
     ~Solver() {}
     void read(char *argv[]);
-    // void makeWindow();
-    void init_pop();
+    void create_grid();
+    int find_block(int, int, int); // type, inst_idx, pop_size
+    int find_available_block(int, int, int, int); // type row col pop_size
+    void init_pop_from_GP();
     void fitness(gene&);
     void parent_selection(parents&);
-    void crossover(parents&, std::vector<gene>&, int);
-    void mutation(std::vector<gene>&, int);
+    void crossover(parents&, std::vector<gene>&);
+    void mutation(std::vector<gene>&);
     void survivor_selection(std::vector<gene>&);
     void genetic_algorithm();
     void output_file(char*);
