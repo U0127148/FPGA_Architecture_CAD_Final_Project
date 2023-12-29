@@ -6,16 +6,11 @@
 #include <climits>
 #include <unordered_set>
 #include <unordered_map>
-#include <chrono>
 #include <cmath>
 const int POP_SIZE = 100;
-// const int TERMINATION = 500;
 const int K = 2;
 double min_y[4];
 double height[4];
-int unit[4];
-int size[4];
-std::unordered_set<int> st1, st2;
 std::unordered_map<int, int> m; // (child1 value, child1 index)
 std::vector<std::vector<Block*>> resource_grid[4];
 
@@ -156,20 +151,6 @@ void Solver::read(char *argv[]) {
         net_vec.emplace_back(net);
     }
     fin.close();
-
-    // CLB
-    inst_to_net[blockType::CLB].resize(inst[blockType::CLB].size(), std::vector<int>(0));
-    // RAM
-    inst_to_net[blockType::RAM].resize(inst[blockType::RAM].size(), std::vector<int>(0));
-    // DSP
-    inst_to_net[blockType::DSP].resize(inst[blockType::DSP].size(), std::vector<int>(0));
-
-    for (int net_id = 0; net_id < net_vec.size(); ++net_id) {
-        for (auto &cell : net->inst_vec) {
-            if (cell->type == blockType::IO) continue;
-            else inst_to_net[cell->type][cell->id].emplace_back(net_id);
-        }
-    }
 }
 
 void Solver::create_grid() {
@@ -343,8 +324,9 @@ int Solver::find_available_block(int type, int r, int c, int p) {
 
 int Solver::find_block(int type, int inst_idx, int p) {
     if (type == blockType::CLB) {
-        int r = (inst[blockType::CLB][inst_idx]->center_y < min_y[blockType::CLB]) ? 0 : (inst[blockType::CLB][inst_idx]->center_y - min_y[blockType::CLB]);
-        if (r >= resource_grid[blockType::CLB].size()) r = resource_grid[blockType::CLB].size() - 1;
+        int r = (inst[blockType::CLB][inst_idx]->center_y < min_y[blockType::CLB]) ? 0 : (inst[blockType::CLB][inst_idx]->center_y - min_y[blockType::CLB]) / height[blockType::CLB];
+        if (r >= resource_grid[blockType::CLB].size() - 1) r = resource_grid[blockType::CLB].size() - 1;
+        else r = (abs(resource_grid[blockType::CLB][r][0]->center_y - inst[blockType::CLB][inst_idx]->center_y) < abs(resource_grid[blockType::CLB][r + 1][0]->center_y - inst[blockType::CLB][inst_idx]->center_y)) ? r : r + 1;
         int c;
         if (inst[blockType::CLB][inst_idx]->center_x < resource_grid[blockType::CLB][r][0]->center_x) c = 0;
         else {
@@ -363,7 +345,8 @@ int Solver::find_block(int type, int inst_idx, int p) {
         }
     } else if (type == blockType::RAM) {
         int r = (inst[blockType::RAM][inst_idx]->center_y < min_y[blockType::RAM]) ? 0 : (inst[blockType::RAM][inst_idx]->center_y - min_y[blockType::RAM]) / height[blockType::RAM];
-        if (r >= resource_grid[blockType::RAM].size()) r = resource_grid[blockType::RAM].size() - 1;
+        if (r >= resource_grid[blockType::RAM].size() - 1) r = resource_grid[blockType::RAM].size() - 1;
+        else r = (abs(resource_grid[blockType::RAM][r][0]->center_y - inst[blockType::RAM][inst_idx]->center_y) < abs(resource_grid[blockType::RAM][r + 1][0]->center_y - inst[blockType::RAM][inst_idx]->center_y)) ? r : r + 1;
         int c;
         if (inst[blockType::RAM][inst_idx]->center_x < resource_grid[blockType::RAM][r][0]->center_x) c = 0;
         else {
@@ -382,7 +365,8 @@ int Solver::find_block(int type, int inst_idx, int p) {
         }
     } else {
         int r = (inst[blockType::DSP][inst_idx]->center_y < min_y[blockType::DSP]) ? 0 : (inst[blockType::DSP][inst_idx]->center_y - min_y[blockType::DSP]) / height[blockType::DSP];
-        if (r >= resource_grid[blockType::DSP].size()) r = resource_grid[blockType::DSP].size() - 1;
+        if (r >= resource_grid[blockType::DSP].size() - 1) r = resource_grid[blockType::DSP].size() - 1;
+        else r = (abs(resource_grid[blockType::DSP][r][0]->center_y - inst[blockType::DSP][inst_idx]->center_y) < abs(resource_grid[blockType::DSP][r + 1][0]->center_y - inst[blockType::DSP][inst_idx]->center_y)) ? r : r + 1;
         int c;
         if (inst[blockType::DSP][inst_idx]->center_x < resource_grid[blockType::DSP][r][0]->center_x) c = 0;
         else {
@@ -411,7 +395,8 @@ void Solver::init_pop_from_GP() {
     for (int i = 0; i < inst[blockType::DSP].size(); ++i) v3.emplace_back(i);
 
     int remain_idx;
-    for (size_t i = 0; i < POP_SIZE; ++i) {
+    std::vector<gene> tmp_pool;
+    for (size_t i = 0; i < POP_SIZE + 50; ++i) {
         gene p;
         // CLB
         p.resource_permu[blockType::CLB].resize(resource[blockType::CLB].size());
@@ -479,15 +464,16 @@ void Solver::init_pop_from_GP() {
         }
         tmp.clear();
 
-        pool.emplace_back(p);
+        tmp_pool.emplace_back(p);
     }
 
-    for (auto &g : pool) fitness(g);
-    std::sort(pool.begin(), pool.end(), [](const gene& lhs, const gene& rhs){
+    for (auto &g : tmp_pool) fitness(g);
+    std::sort(tmp_pool.begin(), tmp_pool.end(), [](const gene& lhs, const gene& rhs){
         return lhs.fitness < rhs.fitness;
     });
+    pool.insert(pool.end(), tmp_pool.begin(), tmp_pool.begin() + POP_SIZE);
 
-    std::cout << pool[0].fitness << std:: endl;
+    std::cout << "Initial HPWL: " << pool[0].fitness << std:: endl;
 }
 
 void Solver::parent_selection(parents& parent) {
@@ -515,134 +501,6 @@ void Solver::crossover(parents& parent, std::vector<gene>& offspring) {
     child2.resource_permu[blockType::RAM].resize(resource[blockType::RAM].size(), 0);
     child2.resource_permu[blockType::DSP].resize(resource[blockType::DSP].size(), 0);
     
-    // if (type == 0) { // order crossover
-    //     int tmp1, tmp2;
-    //     // CLB
-    //     child1.resource_permu[blockType::CLB] = parent.first.resource_permu[blockType::CLB];
-    //     child2.resource_permu[blockType::CLB] = parent.second.resource_permu[blockType::CLB];
-    //     do {
-    //         tmp1 = rand() % resource[blockType::CLB].size();
-    //         tmp2 = rand() % resource[blockType::CLB].size();
-    //     } while (tmp1 == tmp2);
-    //     if (tmp1 > tmp2) std::swap(tmp1, tmp2);
-    //     st1.clear();
-    //     st2.clear();
-    //     for (size_t i = tmp1; i <= tmp2; ++i) {
-    //         st1.insert(parent.first.resource_permu[blockType::CLB][i]);
-    //         st2.insert(parent.second.resource_permu[blockType::CLB][i]);
-    //     }
-    //     int idx2 = tmp2, idx1 = tmp2;
-    //     for (int i = tmp2 + 1; i < resource[blockType::CLB].size(); ++i) {
-    //         idx2++;
-    //         while (st1.find(parent.second.resource_permu[blockType::CLB][mod_table[blockType::CLB][idx2]]) != st1.end()) {
-    //             idx2++;
-    //         }
-    //         child1.resource_permu[blockType::CLB][i] = parent.second.resource_permu[blockType::CLB][mod_table[blockType::CLB][idx2]];
-
-    //         idx1++;
-    //         while (st2.find(parent.first.resource_permu[blockType::CLB][mod_table[blockType::CLB][idx1]]) != st2.end()) {
-    //             idx1++;
-    //         }
-    //         child2.resource_permu[blockType::CLB][i] = parent.first.resource_permu[blockType::CLB][mod_table[blockType::CLB][idx1]];
-    //     }
-    //     for (int i = 0; i < tmp1; ++i) {
-    //         idx2++;
-    //         while (st1.find(parent.second.resource_permu[blockType::CLB][mod_table[blockType::CLB][idx2]]) != st1.end()) {
-    //             idx2++;
-    //         }
-    //         child1.resource_permu[blockType::CLB][i] = parent.second.resource_permu[blockType::CLB][mod_table[blockType::CLB][idx2]];
-
-    //         idx1++;
-    //         while (st2.find(parent.first.resource_permu[blockType::CLB][mod_table[blockType::CLB][idx1]]) != st2.end()) {
-    //             idx1++;
-    //         }
-    //         child2.resource_permu[blockType::CLB][i] = parent.first.resource_permu[blockType::CLB][mod_table[blockType::CLB][idx1]];
-    //     }
-
-    //     // RAM
-    //     child1.resource_permu[blockType::RAM] = parent.first.resource_permu[blockType::RAM];
-    //     child2.resource_permu[blockType::RAM] = parent.second.resource_permu[blockType::RAM];
-    //     do {
-    //         tmp1 = rand() % resource[blockType::RAM].size();
-    //         tmp2 = rand() % resource[blockType::RAM].size();
-    //     } while (tmp1 == tmp2);
-    //     if (tmp1 > tmp2) std::swap(tmp1, tmp2);
-    //     st1.clear();
-    //     st2.clear();
-    //     for (size_t i = tmp1; i <= tmp2; ++i) {
-    //         st1.insert(parent.first.resource_permu[blockType::RAM][i]);
-    //         st2.insert(parent.second.resource_permu[blockType::RAM][i]);
-    //     }
-    //     idx2 = tmp2, idx1 = tmp2;
-    //     for (int i = tmp2 + 1; i < resource[blockType::RAM].size(); ++i) {
-    //         idx2++;
-    //         while (st1.find(parent.second.resource_permu[blockType::RAM][mod_table[blockType::RAM][idx2]]) != st1.end()) {
-    //             idx2++;
-    //         }
-    //         child1.resource_permu[blockType::RAM][i] = parent.second.resource_permu[blockType::RAM][mod_table[blockType::RAM][idx2]];
-
-    //         idx1++;
-    //         while (st2.find(parent.first.resource_permu[blockType::RAM][mod_table[blockType::RAM][idx1]]) != st2.end()) {
-    //             idx1++;
-    //         }
-    //         child2.resource_permu[blockType::RAM][i] = parent.first.resource_permu[blockType::RAM][mod_table[blockType::RAM][idx1]];
-    //     }
-    //     for (int i = 0; i < tmp1; ++i) {
-    //         idx2++;
-    //         while (st1.find(parent.second.resource_permu[blockType::RAM][mod_table[blockType::RAM][idx2]]) != st1.end()) {
-    //             idx2++;
-    //         }
-    //         child1.resource_permu[blockType::RAM][i] = parent.second.resource_permu[blockType::RAM][mod_table[blockType::RAM][idx2]];
-
-    //         idx1++;
-    //         while (st2.find(parent.first.resource_permu[blockType::RAM][mod_table[blockType::RAM][idx1]]) != st2.end()) {
-    //             idx1++;
-    //         }
-    //         child2.resource_permu[blockType::RAM][i] = parent.first.resource_permu[blockType::RAM][mod_table[blockType::RAM][idx1]];
-    //     }
-
-    //     // DSP
-    //     child1.resource_permu[blockType::DSP] = parent.first.resource_permu[blockType::DSP];
-    //     child2.resource_permu[blockType::DSP] = parent.second.resource_permu[blockType::DSP];
-    //     do {
-    //         tmp1 = rand() % resource[blockType::DSP].size();
-    //         tmp2 = rand() % resource[blockType::DSP].size();
-    //     } while (tmp1 == tmp2);
-    //     if (tmp1 > tmp2) std::swap(tmp1, tmp2);
-    //     st1.clear();
-    //     st2.clear();
-    //     for (size_t i = tmp1; i <= tmp2; ++i) {
-    //         st1.insert(parent.first.resource_permu[blockType::DSP][i]);
-    //         st2.insert(parent.second.resource_permu[blockType::DSP][i]);
-    //     }
-    //     idx2 = tmp2, idx1 = tmp2;
-    //     for (int i = tmp2 + 1; i < resource[blockType::DSP].size(); ++i) {
-    //         idx2++;
-    //         while (st1.find(parent.second.resource_permu[blockType::DSP][mod_table[blockType::DSP][idx2]]) != st1.end()) {
-    //             idx2++;
-    //         }
-    //         child1.resource_permu[blockType::DSP][i] = parent.second.resource_permu[blockType::DSP][mod_table[blockType::DSP][idx2]];
-
-    //         idx1++;
-    //         while (st2.find(parent.first.resource_permu[blockType::DSP][mod_table[blockType::DSP][idx1]]) != st2.end()) {
-    //             idx1++;
-    //         }
-    //         child2.resource_permu[blockType::DSP][i] = parent.first.resource_permu[blockType::DSP][mod_table[blockType::DSP][idx1]];
-    //     }
-    //     for (int i = 0; i < tmp1; ++i) {
-    //         idx2++;
-    //         while (st1.find(parent.second.resource_permu[blockType::DSP][mod_table[blockType::DSP][idx2]]) != st1.end()) {
-    //             idx2++;
-    //         }
-    //         child1.resource_permu[blockType::DSP][i] = parent.second.resource_permu[blockType::DSP][mod_table[blockType::DSP][idx2]];
-
-    //         idx1++;
-    //         while (st2.find(parent.first.resource_permu[blockType::DSP][mod_table[blockType::DSP][idx1]]) != st2.end()) {
-    //             idx1++;
-    //         }
-    //         child2.resource_permu[blockType::DSP][i] = parent.first.resource_permu[blockType::DSP][mod_table[blockType::DSP][idx1]];
-    //     }
-    // }
     // cycle crossover
     // CLB
     child1.resource_permu[blockType::CLB] = parent.first.resource_permu[blockType::CLB];
@@ -743,26 +601,25 @@ void Solver::survivor_selection(std::vector<gene>& new_genes) {
     pool = std::vector<gene>(pool.begin(), pool.begin() + POP_SIZE);
 }
 
-void Solver::genetic_algorithm() {
+void Solver::genetic_algorithm(double time_elapsed_before) {
     parents parent;
     std::vector<gene> offspring;
     auto start = std::chrono::steady_clock::now();
-    std::chrono::duration<long long, std::ratio<60>> time_in_sec;
+    double time_in_sec;
+    double time_left = 570 - time_elapsed_before;
     do {
         for (int j = 0; j < POP_SIZE / 2; ++j) {
             parent_selection(parent);
-            // std::cout << "finish parent selection\n";
             crossover(parent, offspring);
-            // std::cout << "finish crossover\n";
             mutation(offspring);
-            // std::cout << "finish mutation\n";
         }
         survivor_selection(offspring);
         offspring.clear();
         std::cout << pool[0].fitness << std::endl;
         auto elapsed = std::chrono::steady_clock::now() - start;
-        time_in_sec = std::chrono::duration_cast<std::chrono::minutes>(elapsed);
-    } while (time_in_sec < std::chrono::minutes(9));
+        time_in_sec = std::chrono::duration<double>(elapsed).count();
+    } while (time_in_sec < time_left);
+    std::cout << "Final HPWL: " << pool[0].fitness << std::endl;
 }
 
 void Solver::output_file(char* output_file) {
@@ -778,6 +635,18 @@ void Solver::output_file(char* output_file) {
         fout << inst[blockType::DSP][i]->name << " " << resource[blockType::DSP][pool[0].resource_permu[blockType::DSP][i]]->name << std::endl;
     }
     fout.close();
+}
+
+void Solver::solve(char *argv[]) {
+    auto start = std::chrono::steady_clock::now();
+    read(argv);
+    create_grid();
+    init_pop_from_GP();
+    output_file(argv[4]);
+    auto elapsed = std::chrono::steady_clock::now() - start;
+    double time_in_sec = std::chrono::duration<double>(elapsed).count(); // second in double type
+    genetic_algorithm(time_in_sec);
+    output_file(argv[4]);
 }
 
 

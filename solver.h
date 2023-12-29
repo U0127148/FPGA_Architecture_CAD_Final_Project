@@ -1,5 +1,6 @@
 #include "data.h"
 #include <unordered_map>
+#include <chrono>
 
 class Solver {
 public:
@@ -15,8 +16,9 @@ public:
     void crossover(parents&, std::vector<gene>&);
     void mutation(std::vector<gene>&);
     void survivor_selection(std::vector<gene>&);
-    void genetic_algorithm();
+    void genetic_algorithm(double);
     void output_file(char*);
+    void solve(char *argv[]);
 private:
     std::vector<Block*> resource[4];
     std::vector<Block*> inst[4];
@@ -24,8 +26,5 @@ private:
     std::unordered_map<std::string, Block*> nameToInst;
     std::vector<Net*> net_vec;
 
-    std::vector<std::vector<Block*>> window[4];
-
-    std::vector<std::vector<int>> inst_to_net[4];
     std::vector<gene> pool;
 };

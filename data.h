@@ -16,7 +16,8 @@ struct Block {
     double center_x, center_y;
     int layer, unit;
     int id;
-    Block(std::string n, int t, double x, double y) : name(n), type(t), center_x(x), center_y(y) {}
+    int sel;
+    Block(std::string n, int t, double x, double y) : name(n), type(t), center_x(x), center_y(y), sel(0) {}
 };
 
 struct Net {
