@@ -1,4 +1,4 @@
--- How to Compile
+### How to Compile
 1. Downloads 5 files: main.cpp, data.h, solver.h, solver.cpp, Makefile
 2. enter the following command:
 $ make
@@ -7,7 +7,7 @@ It will generate the executable file "legalizer" in the current directory
 If you want to remove it, please enter the following command:
 $ make clean
 
--- How to Run
+### How to Run
 enter the following command:
 Usage: ./legalizer <first input file path> <second input file path> <third input file path> <output file path>
 
