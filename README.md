@@ -17,5 +17,13 @@ enter the following command:<br>
 ./legalizer <first input file path> <second input file path> <third input file path> <output file path>
 ```
 
-e.g. <br>
+e.g.
+```
 ./legalizer ./input/testcase1/architecture.txt ./input/testcase1/instance.txt ./input/testcase1/netlist.txt ./output/output1.txt
+```
+
+### Testcases
+Decompress the public_cases.tar.gz to get the public testcases
+```
+tar zxvf public_cases.tar.gz
+```
