@@ -14,7 +14,6 @@ struct Block {
     std::string name;
     int type;
     double center_x, center_y;
-    int layer, unit;
     int id;
     int sel;
     Block(std::string n, int t, double x, double y) : name(n), type(t), center_x(x), center_y(y), sel(0) {}

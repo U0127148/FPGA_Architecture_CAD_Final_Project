@@ -1,27 +1,28 @@
 #include "solver.h"
-#include <fstream>
-#include <sstream>
+
 #include <algorithm>
-#include <random>
 #include <climits>
-#include <unordered_set>
-#include <unordered_map>
 #include <cmath>
+#include <fstream>
+#include <random>
+#include <sstream>
+#include <unordered_map>
+#include <unordered_set>
 const int POP_SIZE = 100;
 const int K = 2;
 double min_y[4];
 double height[4];
-std::unordered_map<int, int> m; // (child1 value, child1 index)
+std::unordered_map<int, int> m;  // (child1 value, child1 index)
 std::vector<std::vector<Block*>> resource_grid[4];
 
-void Solver::read(char *argv[]) {
+void Solver::read(char* argv[]) {
     std::string line;
 
     int idx[4] = {0, 0, 0, 0};
     // first input file (resource)
     std::ifstream fin;
     fin.open(argv[1]);
-    while(getline(fin, line)) {
+    while (getline(fin, line)) {
         // std::cout << line << std::endl;
         int n = 0;
         std::string info, name;
@@ -29,7 +30,7 @@ void Solver::read(char *argv[]) {
         double center_x, center_y;
         int id;
         std::stringstream ss(line);
-        while(getline(ss, info, ' ')) {
+        while (getline(ss, info, ' ')) {
             if (n == 0) {
                 // std::cout << "name: " << info << ' ';
                 name = info;
@@ -48,7 +49,7 @@ void Solver::read(char *argv[]) {
                     block_type = blockType::IO;
                     id = idx[blockType::IO]++;
                 } else {
-                    std::cout << "[ERROR] read FIRST input file\n"; 
+                    std::cout << "[ERROR] read FIRST input file\n";
                 }
             } else if (n == 2) {
                 // std::cout << "center x: " << info << ' ';
@@ -79,7 +80,7 @@ void Solver::read(char *argv[]) {
     idx[blockType::DSP] = 0;
     // second input file (inst)
     fin.open(argv[2]);
-    while(getline(fin, line)) {
+    while (getline(fin, line)) {
         // std::cout << line << std::endl;
         int n = 0;
         std::string info, name;
@@ -87,7 +88,7 @@ void Solver::read(char *argv[]) {
         double center_x, center_y;
         int id;
         std::stringstream ss(line);
-        while(getline(ss, info, ' ')) {
+        while (getline(ss, info, ' ')) {
             if (n == 0) {
                 // std::cout << "name: " << info << ' ';
                 name = info;
@@ -106,7 +107,7 @@ void Solver::read(char *argv[]) {
                     block_type = blockType::IO;
                     id = idx[blockType::IO]++;
                 } else {
-                    std::cout << "[ERROR] read SECOND input file\n"; 
+                    std::cout << "[ERROR] read SECOND input file\n";
                 }
             } else if (n == 2) {
                 // std::cout << "center x: " << info << ' ';
@@ -135,12 +136,12 @@ void Solver::read(char *argv[]) {
     // third input file (net info)
     fin.open(argv[3]);
     Net* net;
-    while(getline(fin, line)) {
+    while (getline(fin, line)) {
         // std::cout << line << std::endl;
         int n = 0;
         std::string info, name;
         std::stringstream ss(line);
-        while(getline(ss, info, ' ')) {
+        while (getline(ss, info, ' ')) {
             if (n == 0) {
                 net = new Net(info);
             } else {
@@ -151,6 +152,20 @@ void Solver::read(char *argv[]) {
         net_vec.emplace_back(net);
     }
     fin.close();
+
+    // CLB
+    inst_to_net[blockType::CLB].resize(inst[blockType::CLB].size(), std::vector<int>(0));
+    // RAM
+    inst_to_net[blockType::RAM].resize(inst[blockType::RAM].size(), std::vector<int>(0));
+    // DSP
+    inst_to_net[blockType::DSP].resize(inst[blockType::DSP].size(), std::vector<int>(0));
+
+    for (int net_id = 0; net_id < net_vec.size(); ++net_id) {
+        for (auto &cell : net->inst_vec) {
+            if (cell->type == blockType::IO) continue;
+            else inst_to_net[cell->type][cell->id].emplace_back(net_id);
+        }
+    }
 }
 
 void Solver::create_grid() {
@@ -159,20 +174,20 @@ void Solver::create_grid() {
     tmp[blockType::RAM] = resource[blockType::RAM];
     tmp[blockType::DSP] = resource[blockType::DSP];
     // sort the resources of CLB, RAM, DSP by x-coordinate then by y-coordinate
-    stable_sort(tmp[blockType::CLB].begin(), tmp[blockType::CLB].end(), [](const Block* lhs, const Block* rhs){
+    stable_sort(tmp[blockType::CLB].begin(), tmp[blockType::CLB].end(), [](const Block* lhs, const Block* rhs) {
         return lhs->center_y < rhs->center_y;
     });
-    stable_sort(tmp[blockType::RAM].begin(), tmp[blockType::RAM].end(), [](const Block* lhs, const Block* rhs){
+    stable_sort(tmp[blockType::RAM].begin(), tmp[blockType::RAM].end(), [](const Block* lhs, const Block* rhs) {
         return lhs->center_y < rhs->center_y;
     });
-    stable_sort(tmp[blockType::DSP].begin(), tmp[blockType::DSP].end(), [](const Block* lhs, const Block* rhs){
+    stable_sort(tmp[blockType::DSP].begin(), tmp[blockType::DSP].end(), [](const Block* lhs, const Block* rhs) {
         return lhs->center_y < rhs->center_y;
     });
     // for (auto &it : tmp[blockType::DSP]) std::cout << it->center_x << ' ' << it->center_y << std::endl;
 
     int flag = 2;
     // get the min y-coordinate and the height of CLB, RAM, DSP
-    for (auto &it : tmp[blockType::CLB]) {
+    for (auto& it : tmp[blockType::CLB]) {
         if (flag == 2) {
             min_y[blockType::CLB] = it->center_y;
             flag--;
@@ -186,7 +201,7 @@ void Solver::create_grid() {
         }
     }
     flag = 2;
-    for (auto &it : tmp[blockType::RAM]) {
+    for (auto& it : tmp[blockType::RAM]) {
         if (flag == 2) {
             min_y[blockType::RAM] = it->center_y;
             flag--;
@@ -200,7 +215,7 @@ void Solver::create_grid() {
         }
     }
     flag = 2;
-    for (auto &it : tmp[blockType::DSP]) {
+    for (auto& it : tmp[blockType::DSP]) {
         if (flag == 2) {
             min_y[blockType::DSP] = it->center_y;
             flag--;
@@ -219,10 +234,10 @@ void Solver::create_grid() {
     // put the block in the same height for every tmp type
     std::vector<Block*> v;
     double h = min_y[blockType::CLB];
-    for (auto &it : tmp[blockType::CLB]) {
+    for (auto& it : tmp[blockType::CLB]) {
         if (it->center_y != h) {
             // std::cout << " new height " << it->center_x << ' ' << it->center_y << std::endl;
-            stable_sort(v.begin(), v.end(), [](const Block* lhs, const Block* rhs){
+            stable_sort(v.begin(), v.end(), [](const Block* lhs, const Block* rhs) {
                 return lhs->center_x < rhs->center_x;
             });
             resource_grid[blockType::CLB].emplace_back(v);
@@ -233,16 +248,16 @@ void Solver::create_grid() {
             v.emplace_back(it);
         }
     }
-    stable_sort(v.begin(), v.end(), [](const Block* lhs, const Block* rhs){
+    stable_sort(v.begin(), v.end(), [](const Block* lhs, const Block* rhs) {
         return lhs->center_x < rhs->center_x;
     });
     resource_grid[blockType::CLB].emplace_back(v);
 
     v.clear();
     h = tmp[blockType::RAM][0]->center_y;
-    for (auto &it : tmp[blockType::RAM]) {
+    for (auto& it : tmp[blockType::RAM]) {
         if (it->center_y != h) {
-            stable_sort(v.begin(), v.end(), [](const Block* lhs, const Block* rhs){
+            stable_sort(v.begin(), v.end(), [](const Block* lhs, const Block* rhs) {
                 return lhs->center_x < rhs->center_x;
             });
             resource_grid[blockType::RAM].emplace_back(v);
@@ -253,16 +268,16 @@ void Solver::create_grid() {
             v.emplace_back(it);
         }
     }
-    stable_sort(v.begin(), v.end(), [](const Block* lhs, const Block* rhs){
+    stable_sort(v.begin(), v.end(), [](const Block* lhs, const Block* rhs) {
         return lhs->center_x < rhs->center_x;
     });
     resource_grid[blockType::RAM].emplace_back(v);
 
     v.clear();
     h = tmp[blockType::DSP][0]->center_y;
-    for (auto &it : tmp[blockType::DSP]) {
+    for (auto& it : tmp[blockType::DSP]) {
         if (it->center_y != h) {
-            stable_sort(v.begin(), v.end(), [](const Block* lhs, const Block* rhs){
+            stable_sort(v.begin(), v.end(), [](const Block* lhs, const Block* rhs) {
                 return lhs->center_x < rhs->center_x;
             });
             resource_grid[blockType::DSP].emplace_back(v);
@@ -273,7 +288,7 @@ void Solver::create_grid() {
             v.emplace_back(it);
         }
     }
-    stable_sort(v.begin(), v.end(), [](const Block* lhs, const Block* rhs){
+    stable_sort(v.begin(), v.end(), [](const Block* lhs, const Block* rhs) {
         return lhs->center_x < rhs->center_x;
     });
     resource_grid[blockType::DSP].emplace_back(v);
@@ -282,12 +297,12 @@ void Solver::create_grid() {
 void Solver::fitness(gene& g) {
     double min_x, min_y, max_x, max_y;
     double fitness = 0;
-    for (auto &net : net_vec) {
+    for (auto& net : net_vec) {
         min_x = INT_MAX;
         min_y = INT_MAX;
         max_x = INT_MIN;
         max_y = INT_MIN;
-        for (auto &inst : net->inst_vec) {
+        for (auto& inst : net->inst_vec) {
             if (inst->type == blockType::IO) {
                 if (inst->center_x < min_x) min_x = inst->center_x;
                 if (inst->center_x > max_x) max_x = inst->center_x;
@@ -303,6 +318,117 @@ void Solver::fitness(gene& g) {
         fitness += (max_x - min_x) + (max_y - min_y);
     }
     g.fitness = fitness;
+}
+
+bool Solver::incremental_fitness(gene& g, int type, int inst_id, int resource_place_id) {
+    double min_x, min_y, max_x, max_y;
+    double fitness1 = 0;
+    for (auto& net_id : inst_to_net[type][inst_id]) {
+        min_x = INT_MAX;
+        min_y = INT_MAX;
+        max_x = INT_MIN;
+        max_y = INT_MIN;
+        for (auto& inst : net_vec[net_id]->inst_vec) {
+            if (inst->type == blockType::IO) {
+                if (inst->center_x < min_x) min_x = inst->center_x;
+                if (inst->center_x > max_x) max_x = inst->center_x;
+                if (inst->center_y < min_y) min_y = inst->center_y;
+                if (inst->center_y > max_y) max_y = inst->center_y;
+            } else {
+                if (resource[inst->type][g.resource_permu[inst->type][inst->id]]->center_x < min_x) min_x = resource[inst->type][g.resource_permu[inst->type][inst->id]]->center_x;
+                if (resource[inst->type][g.resource_permu[inst->type][inst->id]]->center_x > max_x) max_x = resource[inst->type][g.resource_permu[inst->type][inst->id]]->center_x;
+                if (resource[inst->type][g.resource_permu[inst->type][inst->id]]->center_y < min_y) min_y = resource[inst->type][g.resource_permu[inst->type][inst->id]]->center_y;
+                if (resource[inst->type][g.resource_permu[inst->type][inst->id]]->center_y > max_y) max_y = resource[inst->type][g.resource_permu[inst->type][inst->id]]->center_y;
+            }
+        }
+        fitness1 += (max_x - min_x) + (max_y - min_y);
+    }
+    for (auto& net_id : inst_to_net[type][resource_place_id]) {
+        min_x = INT_MAX;
+        min_y = INT_MAX;
+        max_x = INT_MIN;
+        max_y = INT_MIN;
+        for (auto& inst : net_vec[net_id]->inst_vec) {
+            if (inst->type == blockType::IO) {
+                if (inst->center_x < min_x) min_x = inst->center_x;
+                if (inst->center_x > max_x) max_x = inst->center_x;
+                if (inst->center_y < min_y) min_y = inst->center_y;
+                if (inst->center_y > max_y) max_y = inst->center_y;
+            } else {
+                if (resource[inst->type][g.resource_permu[inst->type][inst->id]]->center_x < min_x) min_x = resource[inst->type][g.resource_permu[inst->type][inst->id]]->center_x;
+                if (resource[inst->type][g.resource_permu[inst->type][inst->id]]->center_x > max_x) max_x = resource[inst->type][g.resource_permu[inst->type][inst->id]]->center_x;
+                if (resource[inst->type][g.resource_permu[inst->type][inst->id]]->center_y < min_y) min_y = resource[inst->type][g.resource_permu[inst->type][inst->id]]->center_y;
+                if (resource[inst->type][g.resource_permu[inst->type][inst->id]]->center_y > max_y) max_y = resource[inst->type][g.resource_permu[inst->type][inst->id]]->center_y;
+            }
+        }
+        fitness1 += (max_x - min_x) + (max_y - min_y);
+    }
+    double fitness2 = 0;
+    for (auto& net_id : inst_to_net[type][inst_id]) {
+        min_x = INT_MAX;
+        min_y = INT_MAX;
+        max_x = INT_MIN;
+        max_y = INT_MIN;
+        for (auto& inst : net_vec[net_id]->inst_vec) {
+            if (inst->type == blockType::IO) {
+                if (inst->center_x < min_x) min_x = inst->center_x;
+                if (inst->center_x > max_x) max_x = inst->center_x;
+                if (inst->center_y < min_y) min_y = inst->center_y;
+                if (inst->center_y > max_y) max_y = inst->center_y;
+            } else {
+                if (inst->type == type && inst->id == inst_id) {
+                    if (resource[inst->type][g.resource_permu[inst->type][resource_place_id]]->center_x < min_x) min_x = resource[inst->type][g.resource_permu[inst->type][resource_place_id]]->center_x;
+                    if (resource[inst->type][g.resource_permu[inst->type][resource_place_id]]->center_x > max_x) max_x = resource[inst->type][g.resource_permu[inst->type][resource_place_id]]->center_x;
+                    if (resource[inst->type][g.resource_permu[inst->type][resource_place_id]]->center_y < min_y) min_y = resource[inst->type][g.resource_permu[inst->type][resource_place_id]]->center_y;
+                    if (resource[inst->type][g.resource_permu[inst->type][resource_place_id]]->center_y > max_y) max_y = resource[inst->type][g.resource_permu[inst->type][resource_place_id]]->center_y;
+                } else if (inst->type == type && inst->id == resource_place_id) {
+                    if (resource[inst->type][g.resource_permu[inst->type][inst_id]]->center_x < min_x) min_x = resource[inst->type][g.resource_permu[inst->type][inst_id]]->center_x;
+                    if (resource[inst->type][g.resource_permu[inst->type][inst_id]]->center_x > max_x) max_x = resource[inst->type][g.resource_permu[inst->type][inst_id]]->center_x;
+                    if (resource[inst->type][g.resource_permu[inst->type][inst_id]]->center_y < min_y) min_y = resource[inst->type][g.resource_permu[inst->type][inst_id]]->center_y;
+                    if (resource[inst->type][g.resource_permu[inst->type][inst_id]]->center_y > max_y) max_y = resource[inst->type][g.resource_permu[inst->type][inst_id]]->center_y;
+                } else {
+                    if (resource[inst->type][g.resource_permu[inst->type][inst->id]]->center_x < min_x) min_x = resource[inst->type][g.resource_permu[inst->type][inst->id]]->center_x;
+                    if (resource[inst->type][g.resource_permu[inst->type][inst->id]]->center_x > max_x) max_x = resource[inst->type][g.resource_permu[inst->type][inst->id]]->center_x;
+                    if (resource[inst->type][g.resource_permu[inst->type][inst->id]]->center_y < min_y) min_y = resource[inst->type][g.resource_permu[inst->type][inst->id]]->center_y;
+                    if (resource[inst->type][g.resource_permu[inst->type][inst->id]]->center_y > max_y) max_y = resource[inst->type][g.resource_permu[inst->type][inst->id]]->center_y;
+                }
+            }
+        }
+        fitness2 += (max_x - min_x) + (max_y - min_y);
+    }
+    for (auto& net_id : inst_to_net[type][resource_place_id]) {
+        min_x = INT_MAX;
+        min_y = INT_MAX;
+        max_x = INT_MIN;
+        max_y = INT_MIN;
+        for (auto& inst : net_vec[net_id]->inst_vec) {
+            if (inst->type == blockType::IO) {
+                if (inst->center_x < min_x) min_x = inst->center_x;
+                if (inst->center_x > max_x) max_x = inst->center_x;
+                if (inst->center_y < min_y) min_y = inst->center_y;
+                if (inst->center_y > max_y) max_y = inst->center_y;
+            } else {
+                if (inst->type == type && inst->id == resource_place_id) {
+                    if (resource[inst->type][g.resource_permu[inst->type][inst_id]]->center_x < min_x) min_x = resource[inst->type][g.resource_permu[inst->type][inst_id]]->center_x;
+                    if (resource[inst->type][g.resource_permu[inst->type][inst_id]]->center_x > max_x) max_x = resource[inst->type][g.resource_permu[inst->type][inst_id]]->center_x;
+                    if (resource[inst->type][g.resource_permu[inst->type][inst_id]]->center_y < min_y) min_y = resource[inst->type][g.resource_permu[inst->type][inst_id]]->center_y;
+                    if (resource[inst->type][g.resource_permu[inst->type][inst_id]]->center_y > max_y) max_y = resource[inst->type][g.resource_permu[inst->type][inst_id]]->center_y;
+                } else if (inst->type == type && inst->id == inst_id) {
+                    if (resource[inst->type][g.resource_permu[inst->type][resource_place_id]]->center_x < min_x) min_x = resource[inst->type][g.resource_permu[inst->type][resource_place_id]]->center_x;
+                    if (resource[inst->type][g.resource_permu[inst->type][resource_place_id]]->center_x > max_x) max_x = resource[inst->type][g.resource_permu[inst->type][resource_place_id]]->center_x;
+                    if (resource[inst->type][g.resource_permu[inst->type][resource_place_id]]->center_y < min_y) min_y = resource[inst->type][g.resource_permu[inst->type][resource_place_id]]->center_y;
+                    if (resource[inst->type][g.resource_permu[inst->type][resource_place_id]]->center_y > max_y) max_y = resource[inst->type][g.resource_permu[inst->type][resource_place_id]]->center_y;
+                } else {
+                    if (resource[inst->type][g.resource_permu[inst->type][inst->id]]->center_x < min_x) min_x = resource[inst->type][g.resource_permu[inst->type][inst->id]]->center_x;
+                    if (resource[inst->type][g.resource_permu[inst->type][inst->id]]->center_x > max_x) max_x = resource[inst->type][g.resource_permu[inst->type][inst->id]]->center_x;
+                    if (resource[inst->type][g.resource_permu[inst->type][inst->id]]->center_y < min_y) min_y = resource[inst->type][g.resource_permu[inst->type][inst->id]]->center_y;
+                    if (resource[inst->type][g.resource_permu[inst->type][inst->id]]->center_y > max_y) max_y = resource[inst->type][g.resource_permu[inst->type][inst->id]]->center_y;
+                }
+            }
+        }
+        fitness2 += (max_x - min_x) + (max_y - min_y);
+    }
+    return fitness2 <= fitness1;
 }
 
 int Solver::find_available_block(int type, int r, int c, int p) {
@@ -325,10 +451,13 @@ int Solver::find_available_block(int type, int r, int c, int p) {
 int Solver::find_block(int type, int inst_idx, int p) {
     if (type == blockType::CLB) {
         int r = (inst[blockType::CLB][inst_idx]->center_y < min_y[blockType::CLB]) ? 0 : (inst[blockType::CLB][inst_idx]->center_y - min_y[blockType::CLB]) / height[blockType::CLB];
-        if (r >= resource_grid[blockType::CLB].size() - 1) r = resource_grid[blockType::CLB].size() - 1;
-        else r = (abs(resource_grid[blockType::CLB][r][0]->center_y - inst[blockType::CLB][inst_idx]->center_y) < abs(resource_grid[blockType::CLB][r + 1][0]->center_y - inst[blockType::CLB][inst_idx]->center_y)) ? r : r + 1;
+        if (r >= resource_grid[blockType::CLB].size() - 1)
+            r = resource_grid[blockType::CLB].size() - 1;
+        else
+            r = (abs(resource_grid[blockType::CLB][r][0]->center_y - inst[blockType::CLB][inst_idx]->center_y) < abs(resource_grid[blockType::CLB][r + 1][0]->center_y - inst[blockType::CLB][inst_idx]->center_y)) ? r : r + 1;
         int c;
-        if (inst[blockType::CLB][inst_idx]->center_x < resource_grid[blockType::CLB][r][0]->center_x) c = 0;
+        if (inst[blockType::CLB][inst_idx]->center_x < resource_grid[blockType::CLB][r][0]->center_x)
+            c = 0;
         else {
             for (size_t i = 0; i < resource_grid[blockType::CLB][r].size(); ++i) {
                 if (resource_grid[blockType::CLB][r][i]->center_x > inst[blockType::CLB][inst_idx]->center_x) {
@@ -345,10 +474,13 @@ int Solver::find_block(int type, int inst_idx, int p) {
         }
     } else if (type == blockType::RAM) {
         int r = (inst[blockType::RAM][inst_idx]->center_y < min_y[blockType::RAM]) ? 0 : (inst[blockType::RAM][inst_idx]->center_y - min_y[blockType::RAM]) / height[blockType::RAM];
-        if (r >= resource_grid[blockType::RAM].size() - 1) r = resource_grid[blockType::RAM].size() - 1;
-        else r = (abs(resource_grid[blockType::RAM][r][0]->center_y - inst[blockType::RAM][inst_idx]->center_y) < abs(resource_grid[blockType::RAM][r + 1][0]->center_y - inst[blockType::RAM][inst_idx]->center_y)) ? r : r + 1;
+        if (r >= resource_grid[blockType::RAM].size() - 1)
+            r = resource_grid[blockType::RAM].size() - 1;
+        else
+            r = (abs(resource_grid[blockType::RAM][r][0]->center_y - inst[blockType::RAM][inst_idx]->center_y) < abs(resource_grid[blockType::RAM][r + 1][0]->center_y - inst[blockType::RAM][inst_idx]->center_y)) ? r : r + 1;
         int c;
-        if (inst[blockType::RAM][inst_idx]->center_x < resource_grid[blockType::RAM][r][0]->center_x) c = 0;
+        if (inst[blockType::RAM][inst_idx]->center_x < resource_grid[blockType::RAM][r][0]->center_x)
+            c = 0;
         else {
             for (size_t i = 0; i < resource_grid[blockType::RAM][r].size(); ++i) {
                 if (resource_grid[blockType::RAM][r][i]->center_x > inst[blockType::RAM][inst_idx]->center_x) {
@@ -365,10 +497,13 @@ int Solver::find_block(int type, int inst_idx, int p) {
         }
     } else {
         int r = (inst[blockType::DSP][inst_idx]->center_y < min_y[blockType::DSP]) ? 0 : (inst[blockType::DSP][inst_idx]->center_y - min_y[blockType::DSP]) / height[blockType::DSP];
-        if (r >= resource_grid[blockType::DSP].size() - 1) r = resource_grid[blockType::DSP].size() - 1;
-        else r = (abs(resource_grid[blockType::DSP][r][0]->center_y - inst[blockType::DSP][inst_idx]->center_y) < abs(resource_grid[blockType::DSP][r + 1][0]->center_y - inst[blockType::DSP][inst_idx]->center_y)) ? r : r + 1;
+        if (r >= resource_grid[blockType::DSP].size() - 1)
+            r = resource_grid[blockType::DSP].size() - 1;
+        else
+            r = (abs(resource_grid[blockType::DSP][r][0]->center_y - inst[blockType::DSP][inst_idx]->center_y) < abs(resource_grid[blockType::DSP][r + 1][0]->center_y - inst[blockType::DSP][inst_idx]->center_y)) ? r : r + 1;
         int c;
-        if (inst[blockType::DSP][inst_idx]->center_x < resource_grid[blockType::DSP][r][0]->center_x) c = 0;
+        if (inst[blockType::DSP][inst_idx]->center_x < resource_grid[blockType::DSP][r][0]->center_x)
+            c = 0;
         else {
             for (size_t i = 0; i < resource_grid[blockType::DSP][r].size(); ++i) {
                 if (resource_grid[blockType::DSP][r][i]->center_x > inst[blockType::DSP][inst_idx]->center_x) {
@@ -387,7 +522,7 @@ int Solver::find_block(int type, int inst_idx, int p) {
     return 0;
 }
 
-void Solver::init_pop_from_GP() {
+void Solver::init_pop() {
     std::unordered_set<int> tmp;
     std::vector<int> v1, v2, v3;
     for (int i = 0; i < inst[blockType::CLB].size(); ++i) v1.emplace_back(i);
@@ -441,7 +576,7 @@ void Solver::init_pop_from_GP() {
             std::swap(p.resource_permu[blockType::RAM][j], p.resource_permu[blockType::RAM][random_tmp]);
         }
         tmp.clear();
-        
+
         // DSP
         p.resource_permu[blockType::DSP].resize(resource[blockType::DSP].size());
         for (size_t j = inst[blockType::DSP].size() - 1; j >= 1; --j) {
@@ -467,17 +602,17 @@ void Solver::init_pop_from_GP() {
         tmp_pool.emplace_back(p);
     }
 
-    for (auto &g : tmp_pool) fitness(g);
-    std::sort(tmp_pool.begin(), tmp_pool.end(), [](const gene& lhs, const gene& rhs){
+    for (auto& g : tmp_pool) fitness(g);
+    std::sort(tmp_pool.begin(), tmp_pool.end(), [](const gene& lhs, const gene& rhs) {
         return lhs.fitness < rhs.fitness;
     });
     pool.insert(pool.end(), tmp_pool.begin(), tmp_pool.begin() + POP_SIZE);
 
-    std::cout << "Initial HPWL: " << pool[0].fitness << std:: endl;
+    std::cout << "Initial HPWL: " << pool[0].fitness << std::endl;
 }
 
 void Solver::parent_selection(parents& parent) {
-    std::sort(pool.begin(), pool.end(), [](const gene& lhs, const gene& rhs){
+    std::sort(pool.begin(), pool.end(), [](const gene& lhs, const gene& rhs) {
         return lhs.fitness < rhs.fitness;
     });
     int idx1, idx2;
@@ -500,7 +635,7 @@ void Solver::crossover(parents& parent, std::vector<gene>& offspring) {
     child2.resource_permu[blockType::CLB].resize(resource[blockType::CLB].size(), 0);
     child2.resource_permu[blockType::RAM].resize(resource[blockType::RAM].size(), 0);
     child2.resource_permu[blockType::DSP].resize(resource[blockType::DSP].size(), 0);
-    
+
     // cycle crossover
     // CLB
     child1.resource_permu[blockType::CLB] = parent.first.resource_permu[blockType::CLB];
@@ -511,16 +646,16 @@ void Solver::crossover(parents& parent, std::vector<gene>& offspring) {
         if (!m.count(child1.resource_permu[blockType::CLB][i])) m[child1.resource_permu[blockType::CLB][i]] = i;
     }
     while (!m.empty()) {
-        val1 = m.begin()->first; // child1's value = child2's index
+        val1 = m.begin()->first;  // child1's value = child2's index
         while (1) {
-            if (!m.count(val1)) break; // a cycle has been formed
+            if (!m.count(val1)) break;  // a cycle has been formed
             if (turn & 1) std::swap(child1.resource_permu[blockType::CLB][m[val1]], child2.resource_permu[blockType::CLB][val1]);
             val1 = child1.resource_permu[blockType::CLB][m[val1]];
             m.erase(val1);
         }
         turn++;
     }
-    
+
     // RAM
     child1.resource_permu[blockType::RAM] = parent.first.resource_permu[blockType::RAM];
     child2.resource_permu[blockType::RAM] = parent.second.resource_permu[blockType::RAM];
@@ -530,9 +665,9 @@ void Solver::crossover(parents& parent, std::vector<gene>& offspring) {
         if (!m.count(child1.resource_permu[blockType::RAM][i])) m[child1.resource_permu[blockType::RAM][i]] = i;
     }
     while (!m.empty()) {
-        val1 = m.begin()->first; // child1's value = child2's index
+        val1 = m.begin()->first;  // child1's value = child2's index
         while (1) {
-            if (!m.count(val1)) break; // a cycle has been formed
+            if (!m.count(val1)) break;  // a cycle has been formed
             if (turn & 1) std::swap(child1.resource_permu[blockType::RAM][m[val1]], child2.resource_permu[blockType::RAM][val1]);
             val1 = child1.resource_permu[blockType::RAM][m[val1]];
             m.erase(val1);
@@ -549,9 +684,9 @@ void Solver::crossover(parents& parent, std::vector<gene>& offspring) {
         if (!m.count(child1.resource_permu[blockType::DSP][i])) m[child1.resource_permu[blockType::DSP][i]] = i;
     }
     while (!m.empty()) {
-        val1 = m.begin()->first; // child1's value = child2's index
+        val1 = m.begin()->first;  // child1's value = child2's index
         while (1) {
-            if (!m.count(val1)) break; // a cycle has been formed
+            if (!m.count(val1)) break;  // a cycle has been formed
             if (turn & 1) std::swap(child1.resource_permu[blockType::DSP][m[val1]], child2.resource_permu[blockType::DSP][val1]);
             val1 = child1.resource_permu[blockType::DSP][m[val1]];
             m.erase(val1);
@@ -562,32 +697,46 @@ void Solver::crossover(parents& parent, std::vector<gene>& offspring) {
     offspring.emplace_back(child2);
 }
 
-void Solver::mutation(std::vector<gene>& offspring) {
+void Solver::mutation(parents& parent, std::vector<gene>& offspring) {
+    offspring.emplace_back(parent.first);
+    offspring.emplace_back(parent.second);
     // swap mutation
     int tmp1, tmp2;
     // CLB
     tmp1 = rand() % inst[blockType::CLB].size();
     tmp2 = rand() % inst[blockType::CLB].size();
-    std::swap(offspring[offspring.size() - 1].resource_permu[blockType::CLB][tmp1], offspring[offspring.size() - 1].resource_permu[blockType::CLB][tmp2]);
+    if (incremental_fitness(offspring[offspring.size() - 1], blockType::CLB, tmp1, tmp2)) {
+        std::swap(offspring[offspring.size() - 1].resource_permu[blockType::CLB][tmp1], offspring[offspring.size() - 1].resource_permu[blockType::CLB][tmp2]);
+    }
     tmp1 = rand() % inst[blockType::CLB].size();
     tmp2 = rand() % inst[blockType::CLB].size();
-    std::swap(offspring[offspring.size() - 2].resource_permu[blockType::CLB][tmp1], offspring[offspring.size() - 2].resource_permu[blockType::CLB][tmp2]);
+    if (incremental_fitness(offspring[offspring.size() - 2], blockType::CLB, tmp1, tmp2)) {
+        std::swap(offspring[offspring.size() - 2].resource_permu[blockType::CLB][tmp1], offspring[offspring.size() - 2].resource_permu[blockType::CLB][tmp2]);
+    }
 
     // RAM
     tmp1 = rand() % inst[blockType::RAM].size();
     tmp2 = rand() % inst[blockType::RAM].size();
-    std::swap(offspring[offspring.size() - 1].resource_permu[blockType::RAM][tmp1], offspring[offspring.size() - 1].resource_permu[blockType::RAM][tmp2]);
+    if (incremental_fitness(offspring[offspring.size() - 1], blockType::RAM, tmp1, tmp2)) {
+        std::swap(offspring[offspring.size() - 1].resource_permu[blockType::RAM][tmp1], offspring[offspring.size() - 1].resource_permu[blockType::RAM][tmp2]);
+    }
     tmp1 = rand() % inst[blockType::RAM].size();
     tmp2 = rand() % inst[blockType::RAM].size();
-    std::swap(offspring[offspring.size() - 2].resource_permu[blockType::RAM][tmp1], offspring[offspring.size() - 2].resource_permu[blockType::RAM][tmp2]);
+    if (incremental_fitness(offspring[offspring.size() - 2], blockType::RAM, tmp1, tmp2)) {
+        std::swap(offspring[offspring.size() - 2].resource_permu[blockType::RAM][tmp1], offspring[offspring.size() - 2].resource_permu[blockType::RAM][tmp2]);
+    }
 
     // DSP
     tmp1 = rand() % inst[blockType::DSP].size();
     tmp2 = rand() % inst[blockType::DSP].size();
-    std::swap(offspring[offspring.size() - 1].resource_permu[blockType::DSP][tmp1], offspring[offspring.size() - 1].resource_permu[blockType::DSP][tmp2]);
+    if (incremental_fitness(offspring[offspring.size() - 1], blockType::DSP, tmp1, tmp2)) {
+        std::swap(offspring[offspring.size() - 1].resource_permu[blockType::DSP][tmp1], offspring[offspring.size() - 1].resource_permu[blockType::DSP][tmp2]);
+    }
     tmp1 = rand() % inst[blockType::DSP].size();
     tmp2 = rand() % inst[blockType::DSP].size();
-    std::swap(offspring[offspring.size() - 2].resource_permu[blockType::DSP][tmp1], offspring[offspring.size() - 2].resource_permu[blockType::DSP][tmp2]);
+    if (incremental_fitness(offspring[offspring.size() - 2], blockType::DSP, tmp1, tmp2)) {
+        std::swap(offspring[offspring.size() - 2].resource_permu[blockType::DSP][tmp1], offspring[offspring.size() - 2].resource_permu[blockType::DSP][tmp2]);
+    }
 
     fitness(offspring[offspring.size() - 1]);
     fitness(offspring[offspring.size() - 2]);
@@ -595,7 +744,7 @@ void Solver::mutation(std::vector<gene>& offspring) {
 
 void Solver::survivor_selection(std::vector<gene>& new_genes) {
     pool.insert(pool.end(), new_genes.begin(), new_genes.end());
-    std::sort(pool.begin(), pool.end(), [](const gene& lhs, const gene& rhs){
+    std::sort(pool.begin(), pool.end(), [](const gene& lhs, const gene& rhs) {
         return lhs.fitness < rhs.fitness;
     });
     pool = std::vector<gene>(pool.begin(), pool.begin() + POP_SIZE);
@@ -604,21 +753,51 @@ void Solver::survivor_selection(std::vector<gene>& new_genes) {
 void Solver::genetic_algorithm(double time_elapsed_before) {
     parents parent;
     std::vector<gene> offspring;
+    auto unit_start = std::chrono::steady_clock::now();
+    for (int j = 0; j < POP_SIZE / 2; ++j) {
+        parent_selection(parent);
+        // crossover(parent, offspring);
+        mutation(parent, offspring);
+    }
+    survivor_selection(offspring);
+    offspring.clear();
+    // std::cout << pool[0].fitness << std::endl;
+    auto unit_elapsed = std::chrono::steady_clock::now() - unit_start;
+    double unit_time = std::chrono::duration<double>(unit_elapsed).count();
+
     auto start = std::chrono::steady_clock::now();
     double time_in_sec;
-    double time_left = 570 - time_elapsed_before;
+    double time_left = 585 - time_elapsed_before - unit_time;
+    double min_hpwl = pool[0].fitness;
+    int time = 0;
     do {
-        for (int j = 0; j < POP_SIZE / 2; ++j) {
-            parent_selection(parent);
-            crossover(parent, offspring);
-            mutation(offspring);
+        if (time == 5) {
+            time = 0;
+            for (int j = 0; j < 25; ++j) {
+                parent_selection(parent);
+                crossover(parent, offspring);
+                fitness(offspring[offspring.size() - 1]);
+                fitness(offspring[offspring.size() - 2]);
+            }
+        } else {
+            for (int j = 0; j < POP_SIZE / 2; ++j) {
+                parent_selection(parent);
+                // crossover(parent, offspring);
+                mutation(parent, offspring);
+            }
         }
         survivor_selection(offspring);
         offspring.clear();
-        std::cout << pool[0].fitness << std::endl;
+        // std::cout << "time: " << time << " HPWL: " << min_hpwl << " after: " << pool[0].fitness << std::endl;
+        if (pool[0].fitness < min_hpwl) {
+            time = 0;
+            min_hpwl = pool[0].fitness;
+        } else {
+            time++;
+        }
         auto elapsed = std::chrono::steady_clock::now() - start;
         time_in_sec = std::chrono::duration<double>(elapsed).count();
-    } while (time_in_sec < time_left);
+    } while (time_in_sec + unit_time <= time_left);
     std::cout << "Final HPWL: " << pool[0].fitness << std::endl;
 }
 
@@ -637,16 +816,14 @@ void Solver::output_file(char* output_file) {
     fout.close();
 }
 
-void Solver::solve(char *argv[]) {
+void Solver::solve(char* argv[]) {
     auto start = std::chrono::steady_clock::now();
     read(argv);
     create_grid();
-    init_pop_from_GP();
+    init_pop();
     output_file(argv[4]);
     auto elapsed = std::chrono::steady_clock::now() - start;
-    double time_in_sec = std::chrono::duration<double>(elapsed).count(); // second in double type
+    double time_in_sec = std::chrono::duration<double>(elapsed).count();  // second in double type
     genetic_algorithm(time_in_sec);
     output_file(argv[4]);
 }
-
-
